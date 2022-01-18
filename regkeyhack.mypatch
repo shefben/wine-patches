@@ -1,0 +1,24 @@
+diff --git a/dlls/kernelbase/registry.c b/dlls/kernelbase/registry.c
+index 30c5e9f6f3..d1fba99b05 100644
+--- a/dlls/kernelbase/registry.c
++++ b/dlls/kernelbase/registry.c
+@@ -3046,8 +3046,7 @@ LSTATUS WINAPI RegLoadAppKeyA(const char *file, HKEY *result, REGSAM sam, DWORD
+     if (!file || reserved)
+         return ERROR_INVALID_PARAMETER;
+ 
+-    *result = (HKEY)0xdeadbeef;
+-    return ERROR_SUCCESS;
++    return RegOpenKeyExA(HKEY_CURRENT_USER, "", KEY_ALL_ACCESS, 0, result);
+ }
+ 
+ /******************************************************************************
+@@ -3061,8 +3060,7 @@ LSTATUS WINAPI RegLoadAppKeyW(const WCHAR *file, HKEY *result, REGSAM sam, DWORD
+     if (!file || reserved)
+         return ERROR_INVALID_PARAMETER;
+ 
+-    *result = (HKEY)0xdeadbeef;
+-    return ERROR_SUCCESS;
++    return RegOpenKeyExW(HKEY_CURRENT_USER, L"", KEY_ALL_ACCESS, 0, result);
+ }
+ 
+ /******************************************************************************

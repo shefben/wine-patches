@@ -1,0 +1,37 @@
+diff --git a/dlls/urlmon/umstream.c b/dlls/urlmon/umstream.c
+--- a/dlls/urlmon/umstream.c        
++++ b/dlls/urlmon/umstream.c
+@@ -362,9 +362,17 @@ HRESULT WINAPI URLOpenStreamW(LPUNKNOWN pCaller, LPCWSTR szURL, DWORD dwReserved
+ /***********************************************************************
+  *             URLOpenPullStreamW (URLMON.@)
+  */
+-HRESULT WINAPI URLOpenPullStreamW(IUnknown *caller, const WCHAR *url, DWORD reserved,
+-                                  IBindStatusCallback *callback)
++HRESULT WINAPI URLOpenPullStreamW(IUnknown *pCaller, const WCHAR *szURL, DWORD dwReserved,
++                              IBindStatusCallback *lpfnCB)
++{
++    return URLOpenStreamW(pCaller, szURL, dwReserved, lpfnCB);
++}
++
++/***********************************************************************
++ *             URLOpenPullStreamA (URLMON.@)
++ */
++HRESULT WINAPI URLOpenPullStreamA(LPUNKNOWN pCaller, LPCSTR szURL, DWORD dwReserved,
++                              LPBINDSTATUSCALLBACK lpfnCB)
+ {
+-    FIXME("%p %s %u %p, stub!\n", caller, debugstr_w(url), reserved, callback);
+-    return E_NOTIMPL;
++    return URLOpenStreamA(pCaller, szURL, dwReserved, lpfnCB);
+ }
+diff --git a/dlls/urlmon/urlmon.spec b/dlls/urlmon/urlmon.spec
+--- a/dlls/urlmon/urlmon.spec       
++++ b/dlls/urlmon/urlmon.spec
+@@ -87,7 +87,7 @@
+ @ stub URLDownloadW
+ @ stdcall URLOpenBlockingStreamA(ptr str ptr long ptr)
+ @ stdcall URLOpenBlockingStreamW(ptr wstr ptr long ptr)
+-@ stub URLOpenPullStreamA
++@ stdcall URLOpenPullStreamA(ptr wstr long ptr)
+ @ stdcall URLOpenPullStreamW(ptr wstr long ptr)
+ @ stdcall URLOpenStreamA(ptr str long ptr)
+ @ stdcall URLOpenStreamW(ptr wstr long ptr)

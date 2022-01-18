@@ -1,0 +1,50 @@
+diff --git a/server/sock.c b/server/sock.c
+index fc234e89865..517a95df2ad 100644
+--- a/server/sock.c
++++ b/server/sock.c
+@@ -2037,6 +2037,7 @@ static void sock_ioctl( struct fd *fd, ioctl_code_t code, struct async *async )
+     case IOCTL_AFD_WINE_CREATE:
+     {
+         const struct afd_create_params *params = get_req_data();
++        const int enable = 1;
+ 
+         if (get_req_data_size() != sizeof(*params))
+         {
+@@ -2044,6 +2045,7 @@ static void sock_ioctl( struct fd *fd, ioctl_code_t code, struct async *async )
+             return;
+         }
+         init_socket( sock, params->family, params->type, params->protocol, params->flags );
++        setsockopt( get_unix_fd(sock->fd), SOL_SOCKET, SO_REUSEPORT, &enable, sizeof(enable) );
+         return;
+     }
+ 	
+@@ -3281,7 +3281,7 @@ static void ifchange_poll_event( struct fd *fd, int event )
+ #ifdef HAVE_LINUX_RTNETLINK_H
+     struct ifchange *ifchange;
+     struct sockaddr_nl addr;
+-    int unix_fd;
++    int unix_fd, autoreuse = 1;;
+ 
+     if (ifchange_object)
+     {
+@@ -3297,6 +3297,7 @@ static void ifchange_poll_event( struct fd *fd, int event )
+         return NULL;
+     }
+     fcntl( unix_fd, F_SETFL, O_NONBLOCK ); /* make socket nonblocking */
++    setsockopt(unix_fd, SOL_SOCKET, SO_REUSEADDR, &autoreuse, sizeof(autoreuse));
+     memset( &addr, 0, sizeof(addr) );
+     addr.nl_family = AF_NETLINK;
+     addr.nl_groups = RTMGRP_IPV4_IFADDR;
+diff --git a/dlls/ws2_32/socket.c b/dlls/ws2_32/socket.c
+index ccf6459..8c5785f 100755
+--- a/dlls/ws2_32/socket.c  
++++ b/dlls/ws2_32/socket.c
+@@ -419,7 +419,7 @@ static BOOL socket_list_remove( SOCKET socket )
+     return FALSE;
+ }
+ 
+-#define MAX_SOCKETS_PER_PROCESS      128     /* reasonable guess */
++#define MAX_SOCKETS_PER_PROCESS      32767     /* reasonable guess */
+ #define MAX_UDP_DATAGRAM             1024
+ static INT WINAPI WSA_DefaultBlockingHook( FARPROC x );
+ 

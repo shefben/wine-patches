@@ -1,0 +1,83 @@
+diff --git a/dlls/user32/edit.c b/dlls/user32/edit.c
+index 557a091c0d..ac07653bff 100644
+--- a/dlls/user32/edit.c
++++ b/dlls/user32/edit.c
+@@ -3685,33 +3685,12 @@ static LRESULT EDIT_WM_MouseMove(EDITSTATE *es, INT x, INT y)
+ 	return 0;
+ }
+ 
+-
+-/*********************************************************************
+- *
+- *	WM_PAINT
+- *
+- */
+-static void EDIT_WM_Paint(EDITSTATE *es, HDC hdc)
++static void EDIT_WM_Erase(EDITSTATE *es, HDC dc)
+ {
+-	PAINTSTRUCT ps;
+-	INT i;
+-	HDC dc;
+-	HFONT old_font = 0;
+-	RECT rc;
+-	RECT rcClient;
+-	RECT rcLine;
+-	RECT rcRgn;
+-	HBRUSH brush;
+-	HBRUSH old_brush;
++	RECT rcClient, rc;
++	HBRUSH brush, old_brush;
+ 	INT bw, bh;
+-	BOOL rev = es->bEnableState &&
+-				((es->flags & EF_FOCUSED) ||
+-					(es->style & ES_NOHIDESEL));
+-        dc = hdc ? hdc : BeginPaint(es->hwndSelf, &ps);
+ 
+-	/* The dc we use for calculating may not be the one we paint into.
+-	   This is the safest action. */
+-	EDIT_InvalidateUniscribeData(es);
+ 	GetClientRect(es->hwndSelf, &rcClient);
+ 
+ 	/* get the background brush */
+@@ -3744,6 +3723,33 @@ static void EDIT_WM_Paint(EDITSTATE *es, HDC hdc)
+ 	
+ 	GetClipBox(dc, &rc);
+ 	FillRect(dc, &rc, brush);
++}
++
++/*********************************************************************
++ *
++ *	WM_PAINT
++ *
++ */
++static void EDIT_WM_Paint(EDITSTATE *es, HDC hdc)
++{
++	PAINTSTRUCT ps;
++	INT i;
++	HDC dc;
++	HFONT old_font = 0;
++	HBRUSH brush;
++	RECT rc;
++	RECT rcClient;
++	RECT rcLine;
++	RECT rcRgn;
++	BOOL rev = es->bEnableState &&
++				((es->flags & EF_FOCUSED) ||
++					(es->style & ES_NOHIDESEL));
++        dc = hdc ? hdc : BeginPaint(es->hwndSelf, &ps);
++
++	/* The dc we use for calculating may not be the one we paint into.
++	   This is the safest action. */
++	EDIT_InvalidateUniscribeData(es);
++	GetClientRect(es->hwndSelf, &rcClient);
+ 
+ 	IntersectClipRect(dc, es->format_rect.left,
+ 				es->format_rect.top,
+@@ -5051,6 +5057,7 @@ LRESULT EditWndProc_common( HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam, B
+ 		break;
+ 
+ 	case WM_ERASEBKGND:
++		EDIT_WM_Erase(es, (HDC)wParam);
+ 		/* we do the proper erase in EDIT_WM_Paint */
+ 		result = 1;
+ 		break;

@@ -1,0 +1,16 @@
+diff --git a/dlls/scrrun/filesystem.c b/dlls/scrrun/filesystem.c
+index 7b0b2e110a6..e22673e4600 100644
+--- a/dlls/scrrun/filesystem.c
++++ b/dlls/scrrun/filesystem.c
+@@ -3633,9 +3633,9 @@ static HRESULT WINAPI filesys_MoveFile(IFileSystem3 *iface, BSTR source, BSTR de
+ static HRESULT WINAPI filesys_MoveFolder(IFileSystem3 *iface,BSTR Source,
+                                             BSTR Destination)
+ {
+-    FIXME("%p %s %s\n", iface, debugstr_w(Source), debugstr_w(Destination));
++    TRACE("%p %s %s\n", iface, debugstr_w(Source), debugstr_w(Destination));
+ 
+-    return E_NOTIMPL;
++    return MoveFileW(Source, Destination) ? S_OK : create_error(GetLastError());
+ }
+ 
+ static inline HRESULT copy_file(const WCHAR *source, DWORD source_len,

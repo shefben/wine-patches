@@ -1,0 +1,138 @@
+diff --git a/dlls/wbemprox/builtin.c b/dlls/wbemprox/builtin.c
+index 6b63c74..a7e3768 100755
+--- a/dlls/wbemprox/builtin.c 
++++ b/dlls/wbemprox/builtin.c.
+@@ -474,6 +474,54 @@ static const struct column col_winsat[] =
+     { L"WinSPRLevel",           CIM_REAL32 },
+ };
+ 
++static const struct column col_softwarelicensingproduct[] =
++{
++    { L"ID", CIM_STRING | COL_FLAG_KEY },
++    { L"Name", CIM_STRING },
++    { L"Description", CIM_STRING },
++    { L"ApplicationID", CIM_STRING },
++    { L"ProcessorURL", CIM_STRING },
++    { L"MachineURL", CIM_STRING },
++    { L"ProductKeyURL", CIM_STRING },
++    { L"UseLicenseURL", CIM_STRING },
++    { L"LicenseStatus", CIM_UINT32 },
++    { L"LicenseStatusReason", CIM_UINT32 },
++    { L"GracePeriodRemaining", CIM_UINT32 },
++    { L"EvaluationEndDate", CIM_DATETIME },
++    { L"OfflineInstallationId", CIM_STRING },
++    { L"PartialProductKey", CIM_STRING },
++    { L"ProductKeyID", CIM_STRING },
++    { L"LicenseFamily", CIM_STRING },
++    { L"LicenseDependsOn", CIM_STRING },
++    { L"LicenseIsAddon", CIM_BOOLEAN},
++    { L"VLActivationInterval", CIM_UINT32 },
++    { L"VLRenewalInterval", CIM_UINT32 },
++    { L"KeyManagementServiceProductKeyID", CIM_STRING },
++    { L"KeyManagementServiceMachine", CIM_STRING },
++    { L"KeyManagementServicePort", CIM_UINT32 },
++    { L"DiscoveredKeyManagementServiceMachineName", CIM_STRING },
++    { L"DiscoveredKeyManagementServiceMachinePort", CIM_UINT32 },
++    { L"IsKeyManagementServiceMachine", CIM_UINT32 },
++    { L"KeyManagementServiceCurrentCount", CIM_UINT32 },
++    { L"RequiredClientCount", CIM_UINT32 },
++    { L"KeyManagementServiceUnlicensedRequests", CIM_UINT32 },
++    { L"KeyManagementServiceLicensedRequests", CIM_UINT32 },
++    { L"KeyManagementServiceOOBGraceRequests", CIM_UINT32 },
++    { L"KeyManagementServiceOOTGraceRequests", CIM_UINT32 },
++    { L"KeyManagementServiceNonGenuineGraceRequests", CIM_UINT32 },
++    { L"KeyManagementServiceTotalRequests", CIM_UINT32 },
++    { L"KeyManagementServiceFailedRequests", CIM_UINT32 },
++    { L"KeyManagementServiceNotificationRequests", CIM_UINT32 },
++    { L"GenuineStatus", CIM_UINT32 },
++    { L"ExtendedGrace", CIM_UINT32 },
++    { L"TokenActivationILID", CIM_STRING },
++    { L"TokenActivationILVID", CIM_UINT32 },
++    { L"TokenActivationGrantNumber", CIM_UINT32 },
++    { L"TokenActivationCertificateThumbprint", CIM_STRING },
++    { L"TokenActivationAdditionalInfo", CIM_STRING },
++    { L"TrustedTime", CIM_DATETIME },
++};
++
+ #include "pshpack1.h"
+ struct record_associator
+ {
+@@ -894,6 +942,55 @@ struct record_winsat
+     UINT32       winsatassessmentstate;
+     FLOAT        winsprlevel;
+ };
++
++struct record_softwarelicensingproduct
++{
++    const WCHAR *id;
++    const WCHAR *name;
++    const WCHAR *description;
++    const WCHAR *appid;
++    const WCHAR *processorurl;
++    const WCHAR *machineurl;
++    const WCHAR *productkeyurl;
++    const WCHAR *useLicenseurl;
++    UINT32       licensestatus;
++    UINT32       licensestatusreason;
++    UINT32       graceperiodremaining;
++    const WCHAR *evaluationenddate;
++    const WCHAR *offlineinstallationid;
++    const WCHAR *partialproductkey;
++    const WCHAR *productkeyid;
++    const WCHAR *licensefamily;
++    const WCHAR *licensedependson;
++    BOOLEAN      licenseisaddon;
++    UINT32       vlactivationinterval;
++    UINT32       vlrenewalinterval;
++    const WCHAR *keymanagementserviceproductkeyid;
++    const WCHAR *keymanagementservicemachine;
++    UINT32       keymanagementserviceport;
++    const WCHAR  *discoveredkeymanagementservicemachinename;
++    UINT32       discoveredkeymanagementservicemachineport;
++    UINT32       isKeymanagementservicemachine;
++    UINT32       keymanagementservicecurrentcount;
++    UINT32       requiredclientcount;
++    UINT32       keymanagementserviceunlicensedrequests;
++    UINT32       keymanagementservicelicensedrequests;
++    UINT32       keymanagementserviceoobgracerequests;
++    UINT32       keymanagementserviceootgracerequests;
++    UINT32       keymanagementservicenongenuinegracerequests;
++    UINT32       keymanagementservicetotalrequests;
++    UINT32       keymanagementservicefailedrequests;
++    UINT32       keymanagementservicenotificationrequests;
++    UINT32       genuinestatus;
++    UINT32       extendedgrace;
++    const WCHAR *tokenactivationilid;
++    UINT32       tokenactivationilvid;
++    UINT32       tokenactivationgrantnumber;
++    const WCHAR *tokenactivationcertificatethumbprint;
++    const WCHAR *tokenactivationadditionalinfo;
++    const WCHAR *trustedtime;
++};
++
+ #include "poppack.h"
+ 
+ static const struct record_associator data_associator[] =
+@@ -1016,6 +1113,13 @@ static const struct record_winsat data_winsat[] =
+     { 8.0f, 8.0f, 8.0f, 8.0f, 8.0f, L"MostRecentAssessment", 1 /* Valid */, 8.0f },
+ };
+ 
++static const struct record_softwarelicensingproduct data_softwarelicensingproduct[] =
++{
++    { L"0", L"Nonexistent", L"first entry into table", L"0", L"localhost", L"localhost", L"localhost", 
++    L"localhost", 1, 1, 0, L"1-1-1991", L"0", L"inval", L"0", L"0", NULL, FALSE, 0, 0, L"0", L"localhost",
++    80, L"localhost", 80, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, L"noid", 0, 0, L"none", L"none", L"1-1-1991"},
++};
++
+ /* check if row matches condition and update status */
+ static BOOL match_row( const struct table *table, UINT row, const struct expr *cond, enum fill_status *status )
+ {
+@@ -4142,6 +4246,8 @@ static struct table cimv2_builtin_classes[] =
+     { L"Win32_SystemEnclosure", C(col_systemenclosure), 0, 0, NULL, fill_systemenclosure },
+     { L"Win32_VideoController", C(col_videocontroller), 0, 0, NULL, fill_videocontroller },
+     { L"Win32_WinSAT", C(col_winsat), D(data_winsat) },
++    { L"SoftwareLicensingProduct", C(col_softwarelicensingproduct), D(data_softwarelicensingproduct) },
++    
+ };
+ 
+ static struct table wmi_builtin_classes[] =
