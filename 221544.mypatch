@@ -1,0 +1,94 @@
+From: Paul Gofman <pgofman@codeweavers.com>
+Subject: [PATCH 3/4] kernelbase: Set correct error for abandoned completion port waits.
+Message-Id: <20211207105917.311408-3-pgofman@codeweavers.com>
+Date: Tue,  7 Dec 2021 13:59:16 +0300
+In-Reply-To: <20211207105917.311408-1-pgofman@codeweavers.com>
+References: <20211207105917.311408-1-pgofman@codeweavers.com>
+
+Based on a patch by Alexey Prokhin.
+
+Signed-off-by: Paul Gofman <pgofman@codeweavers.com>
+---
+ dlls/kernelbase/sync.c  |  2 ++
+ dlls/ntdll/tests/sync.c | 28 ++++++++++++++++++++++++++--
+ 2 files changed, 28 insertions(+), 2 deletions(-)
+
+diff --git a/dlls/kernelbase/sync.c b/dlls/kernelbase/sync.c
+index ab963c62221..a5522b1d72a 100644
+--- a/dlls/kernelbase/sync.c
++++ b/dlls/kernelbase/sync.c
+@@ -1067,7 +1067,7 @@ BOOL WINAPI DECLSPEC_HOTPATCH GetQueuedCompletionStatus( HANDLE port, LPDWORD co
+     }
+ 
+     if (status == STATUS_TIMEOUT) SetLastError( WAIT_TIMEOUT );
+-    else if (status == ERROR_WAIT_NO_CHILDREN) SetLastError( ERROR_ABANDONED_WAIT_0 );
++    else if (status == ERROR_WAIT_NO_CHILDREN || status == STATUS_ABANDONED_WAIT_0) SetLastError( ERROR_ABANDONED_WAIT_0 );
+     else SetLastError( RtlNtStatusToDosError(status) );
+     return FALSE;
+ }
+@@ -1087,6 +1088,7 @@ BOOL WINAPI DECLSPEC_HOTPATCH GetQueuedCompletionStatusEx( HANDLE port, OVERLAPP
+                                   written, get_nt_timeout( &time, timeout ), alertable );
+     if (ret == STATUS_SUCCESS) return TRUE;
+     else if (ret == STATUS_TIMEOUT) SetLastError( WAIT_TIMEOUT );
++    else if (ret == STATUS_ABANDONED_WAIT_0) SetLastError( ERROR_ABANDONED_WAIT_0 );
+     else if (ret == STATUS_USER_APC) SetLastError( WAIT_IO_COMPLETION );
+     else SetLastError( RtlNtStatusToDosError(ret) );
+     return FALSE;
+diff --git a/dlls/ntdll/tests/sync.c b/dlls/ntdll/tests/sync.c
+index 562df0f66b0..97e8ba1b778 100644
+--- a/dlls/ntdll/tests/sync.c
++++ b/dlls/ntdll/tests/sync.c
+@@ -846,8 +846,9 @@ static DWORD WINAPI test_close_io_completion_thread(void *param)
+     IO_STATUS_BLOCK iosb;
+     ULONG_PTR key, value;
+     NTSTATUS status;
++    OVERLAPPED *ov;
++    DWORD ret, err;
+     ULONG count;
+-    DWORD ret;
+ 
+     ret = WaitForSingleObject( test_close_io_completion_port_ready, INFINITE );
+     ok( ret == WAIT_OBJECT_0, "Got unexpected ret %#x.\n", ret );
+@@ -869,6 +870,29 @@ static DWORD WINAPI test_close_io_completion_thread(void *param)
+     else
+         ok( status == STATUS_ABANDONED_WAIT_0, "Got unexpected status %#x.\n", status );
+ 
++    ret = WaitForSingleObject( test_close_io_completion_port_ready, INFINITE );
++    ok( ret == WAIT_OBJECT_0, "Got unexpected ret %#x.\n", ret );
++    SetEvent( test_close_io_completion_test_ready );
++    ov = (void *)0xdeadbeaf;
++    SetLastError(0xdeadbeef);
++    ret = GetQueuedCompletionStatus( test_close_io_completion_port, &count, &key, &ov, INFINITE );
++    err = GetLastError();
++    ok( !ret && (err == ERROR_ABANDONED_WAIT_0 || err == ERROR_INVALID_HANDLE),
++        "Got unexpected ret %#x, error %u.\n", ret, err );
++    ok( !ov, "Got unexpected ov %p.\n", ov );
++
++    ret = WaitForSingleObject( test_close_io_completion_port_ready, INFINITE );
++    ok( ret == WAIT_OBJECT_0, "Got unexpected ret %#x.\n", ret );
++    SetEvent( test_close_io_completion_test_ready );
++    ov = (void *)0xdeadbeaf;
++    SetLastError(0xdeadbeef);
++    ret = GetQueuedCompletionStatusEx( test_close_io_completion_port, (OVERLAPPED_ENTRY *)&info, 1,
++                                       &count, INFINITE, FALSE );
++    err = GetLastError();
++    ok( !ret && (err == ERROR_ABANDONED_WAIT_0 || err == ERROR_INVALID_HANDLE),
++        "Got unexpected ret %#x, error %u.\n", ret, err );
++    ok( count == 1, "Got unexpected count %u.\n", count );
++
+     return 0;
+ }
+ 
+@@ -885,7 +909,7 @@ static void test_close_io_completion(void)
+     thread = CreateThread( NULL, 0, test_close_io_completion_thread, NULL, 0, NULL );
+     ok( !!thread, "Failed to create thread, error %u.\n", GetLastError() );
+ 
+-    for (i = 0; i < 2; ++i)
++    for (i = 0; i < 4; ++i)
+     {
+         status = NtCreateIoCompletion( &test_close_io_completion_port, IO_COMPLETION_ALL_ACCESS, NULL, 0 );
+         ok( !status, "Got unexpected status %#x.\n", status );
+
+-- 
+2.33.1
+

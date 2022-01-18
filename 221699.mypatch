@@ -1,0 +1,28 @@
+From: Eric Pouech <eric.pouech@gmail.com>
+Subject: [PATCH 18/19] programs/winedbg: only call HeapFree on rightfully obtained buffers
+Message-Id: <163897112672.528091.16623435809976930054.stgit@euterpe>
+Date: Wed,  8 Dec 2021 14:45:26 +0100
+In-Reply-To: <163897087724.528091.10090935688970751662.stgit@euterpe>
+References: <163897087724.528091.10090935688970751662.stgit@euterpe>
+
+Signed-off-by: Eric Pouech <eric.pouech@gmail.com>
+
+---
+ programs/winedbg/types.c |    3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/programs/winedbg/types.c b/programs/winedbg/types.c
+index 87380487ea2..a5e77c1d5bc 100644
+--- a/programs/winedbg/types.c
++++ b/programs/winedbg/types.c
+@@ -604,7 +604,8 @@ BOOL types_print_type(const struct dbg_type* type, BOOL details)
+         return FALSE;
+     }
+ 
+-    name = (types_get_info(type, TI_GET_SYMNAME, &ptr) && ptr) ? ptr : L"--none--";
++    if (!types_get_info(type, TI_GET_SYMNAME, &ptr)) ptr = NULL;
++    name = ptr ? ptr : L"--none--";
+ 
+     switch (tag)
+     {
+

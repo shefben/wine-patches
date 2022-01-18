@@ -1,0 +1,403 @@
+From 3fe281157c71e68bd5c8bd0ef1bbc569913a7a97 Mon Sep 17 00:00:00 2001
+From: Jinoh Kang <jinoh.kang.kr@gmail.com>
+Date: Thu, 30 Dec 2021 00:32:52 +0900
+Subject: [PATCH 07/13] loader: Don't clobber existing memory mappings when
+ reserving addresses.
+To: wine-devel@winehq.org
+
+Today, the preloader makes no attempt to avoid unmapping existing
+memory mappings except the initial stack.  This results in irrevocably
+unmapping some useful preallocated memory areas, such as vDSO.
+
+Fix this by reading /proc/self/maps for existing VMAs, and splitting
+mmap() calls to avoid erasing existing memory mappings.
+
+Note that MAP_FIXED_NOREPLACE is not suitable for this kind of job:
+it fails entirely if there exist *any* overlapping memory mappings.
+
+Signed-off-by: Jinoh Kang <jinoh.kang.kr@gmail.com>
+---
+ loader/preloader.c | 332 +++++++++++++++++++++++++++++++++++++++++----
+ 1 file changed, 309 insertions(+), 23 deletions(-)
+
+diff --git a/loader/preloader.c b/loader/preloader.c
+index 3f1d4ff7b21..6a3ac41ad7c 100644
+--- a/loader/preloader.c
++++ b/loader/preloader.c
+@@ -180,6 +180,31 @@ struct preloader_state
+     struct stackarg_info s;
+ };
+ 
++struct linebuffer
++{
++    char *base;
++    char *limit;
++    char *head;
++    char *tail;
++    int overflow;
++};
++
++struct vma_area
++{
++    unsigned long start;
++    unsigned long end;
++};
++
++struct vma_area_list
++{
++    struct vma_area *base;
++    struct vma_area *list_end;
++    struct vma_area *alloc_end;
++};
++
++#define FOREACH_VMA(list, item) \
++    for ((item) = (list)->base; (item) != (list)->list_end; (item)++)
++
+ /*
+  * The __bb_init_func is an empty function only called when file is
+  * compiled with gcc flags "-fprofile-arcs -ftest-coverage".  This
+@@ -738,6 +763,17 @@ static inline void *wld_memmove( void *dest, const void *src, size_t len )
+     return dest;
+ }
+ 
++static inline void *wld_memchr( const void *mem, int val, size_t len )
++{
++    const unsigned char *ptr = mem, *end = (const unsigned char *)ptr + len;
++
++    for (ptr = mem; ptr != end; ptr++)
++        if (*ptr == (unsigned char)val)
++            return (void *)ptr;
++
++    return NULL;
++}
++
+ static inline unsigned long parse_ul( const char *nptr, char **endptr, unsigned int radix, int *overflow )
+ {
+     const char *p = nptr;
+@@ -1522,6 +1558,273 @@ static void set_process_name( int argc, char *argv[] )
+     for (i = 1; i < argc; i++) argv[i] -= off;
+ }
+ 
++static void linebuffer_init( struct linebuffer *lbuf, char *base, size_t len )
++{
++    lbuf->base = base;
++    lbuf->limit = base + (len - 1);  /* extra NULL byte */
++    lbuf->head = base;
++    lbuf->tail = base;
++    lbuf->overflow = 0;
++}
++
++static char *linebuffer_getline( struct linebuffer *lbuf, char delim )
++{
++    char *lnp, *line;
++
++    while ((lnp = wld_memchr( lbuf->tail, delim, lbuf->head - lbuf->tail )))
++    {
++        line = lbuf->tail;
++        lbuf->tail = lnp + 1;
++        if (!lbuf->overflow)
++        {
++            *lnp = '\0';
++            return line;
++        }
++        lbuf->overflow = 0;
++    }
++
++    if (lbuf->base == lbuf->tail)
++    {
++        if (lbuf->head == lbuf->limit)
++        {
++            line = lbuf->tail;
++            lbuf->tail = lbuf->head;
++            lbuf->overflow = 1;
++            *lbuf->head = '\0';
++            return line;
++        }
++    }
++    else wld_memmove( lbuf->base, lbuf->tail, lbuf->head - lbuf->tail);
++    lbuf->head -= lbuf->tail - lbuf->base;
++    lbuf->tail = lbuf->base;
++
++    return NULL;
++}
++
++static int parse_maps_line( struct vma_area *entry, char *line )
++{
++    struct vma_area item = { 0 };
++    char *ptr = line;
++    int overflow;
++
++    item.start = parse_ul( ptr, &ptr, 16, &overflow );
++    if (overflow) return -1;
++    if (*ptr != '-') fatal_error( "parse error in /proc/self/maps\n" );
++    ptr++;
++
++    item.end = parse_ul( ptr, &ptr, 16, &overflow );
++    if (overflow) item.end = -page_size;
++    if (*ptr != ' ') fatal_error( "parse error in /proc/self/maps\n" );
++    ptr++;
++
++    if (item.start >= item.end) return -1;
++
++    if (*ptr != 'r' && *ptr != '-') fatal_error( "parse error in /proc/self/maps\n" );
++    ptr++;
++    if (*ptr != 'w' && *ptr != '-') fatal_error( "parse error in /proc/self/maps\n" );
++    ptr++;
++    if (*ptr != 'x' && *ptr != '-') fatal_error( "parse error in /proc/self/maps\n" );
++    ptr++;
++    if (*ptr != 's' && *ptr != 'p') fatal_error( "parse error in /proc/self/maps\n" );
++    ptr++;
++    if (*ptr != ' ') fatal_error( "parse error in /proc/self/maps\n" );
++    ptr++;
++
++    parse_ul( ptr, &ptr, 16, NULL );
++    if (*ptr != ' ') fatal_error( "parse error in /proc/self/maps\n" );
++    ptr++;
++
++    parse_ul( ptr, &ptr, 16, NULL );
++    if (*ptr != ':') fatal_error( "parse error in /proc/self/maps\n" );
++    ptr++;
++
++    parse_ul( ptr, &ptr, 16, NULL );
++    if (*ptr != ' ') fatal_error( "parse error in /proc/self/maps\n" );
++    ptr++;
++
++    parse_ul( ptr, &ptr, 16, NULL );
++    if (*ptr != ' ') fatal_error( "parse error in /proc/self/maps\n" );
++    ptr++;
++
++    *entry = item;
++    return 0;
++}
++
++static struct vma_area *lookup_vma_entry( const struct vma_area_list *list, unsigned long address )
++{
++    const struct vma_area *left = list->base, *right = list->list_end, *mid;
++    while (left < right)
++    {
++        mid = left + (right - left) / 2;
++        if (mid->end <= address) left = mid + 1;
++        else right = mid;
++    }
++    return (struct vma_area *)left;
++}
++
++static int map_reserve_range( void *addr, size_t size )
++{
++    if (addr == (void *)-1 ||
++        wld_mmap( addr, size, PROT_NONE,
++                  MAP_FIXED | MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE, -1, 0) != addr)
++        return -1;
++    return 0;
++}
++
++static int map_reserve_unmapped_range( const struct vma_area_list *list, void *addr, size_t size )
++{
++    unsigned long range_start = (unsigned long)addr,
++                  range_end = (unsigned long)addr + size;
++    const struct vma_area *start, *item;
++    unsigned long last_addr = range_start;
++
++    start = lookup_vma_entry( list, range_start );
++    for (item = start; item != list->list_end && item->start < range_end; item++)
++    {
++        if (item->start > last_addr &&
++            map_reserve_range( (void *)last_addr, item->start - last_addr ) < 0)
++            goto fail;
++        last_addr = item->end;
++    }
++
++    if (range_end > last_addr &&
++        map_reserve_range( (void *)last_addr, range_end - last_addr ) < 0)
++        goto fail;
++    return 0;
++
++fail:
++    while (item != start)
++    {
++        item--;
++        last_addr = item == start ? range_start : item[-1].end;
++        if (item->start > last_addr)
++            wld_munmap( (void *)last_addr, item->start - last_addr );
++    }
++    return -1;
++}
++
++static void insert_vma_entry( struct vma_area_list *list, const struct vma_area *item )
++{
++    struct vma_area *left = list->base, *right, *mid;
++
++    if (list->base < list->list_end)
++    {
++        right = list->list_end;
++        mid = right - 1;  /* start search from end */
++        do
++        {
++            if (mid->start < item->start) left = mid + 1;
++            else right = mid;
++            mid = left + (right - left) / 2;
++        } while (mid < right);
++    }
++    wld_memmove(left + 1, left, list->list_end - left);
++    wld_memmove(left, item, sizeof(*item));
++    list->list_end++;
++    return;
++}
++
++static void scan_vma( struct vma_area_list *list, size_t *act_count )
++{
++    int fd;
++    size_t n = 0;
++    ssize_t nread;
++    struct linebuffer lbuf;
++    char buffer[80 + PATH_MAX], *line;
++    struct vma_area item;
++
++    fd = wld_open( "/proc/self/maps", O_RDONLY );
++    if (fd == -1) fatal_error( "could not open /proc/self/maps\n" );
++
++    linebuffer_init(&lbuf, buffer, sizeof(buffer));
++    for (;;)
++    {
++        nread = wld_read( fd, lbuf.head, lbuf.limit - lbuf.head );
++        if (nread < 0) fatal_error( "could not read /proc/self/maps\n" );
++        if (nread == 0) break;
++        lbuf.head += nread;
++
++        while ((line = linebuffer_getline( &lbuf, '\n' )))
++        {
++            if (parse_maps_line( &item, line ) >= 0)
++            {
++                if (list->list_end < list->alloc_end) insert_vma_entry( list, &item );
++                n++;
++            }
++        }
++    }
++
++    wld_close(fd);
++    *act_count = n;
++}
++
++static void free_vma_list( struct vma_area_list *list )
++{
++    if (list->base)
++        wld_munmap( list->base,
++                    (unsigned char *)list->alloc_end - (unsigned char *)list->base );
++    list->base = NULL;
++    list->list_end = NULL;
++    list->alloc_end = NULL;
++}
++
++static void alloc_scan_vma( struct vma_area_list *listp )
++{
++    size_t max_count = page_size / sizeof(struct vma_area);
++    struct vma_area_list vma_list;
++
++    for (;;)
++    {
++        vma_list.base = wld_mmap( NULL, sizeof(struct vma_area) * max_count,
++                                  PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS,
++                                  -1, 0 );
++        if (vma_list.base == (struct vma_area *)-1)
++            fatal_error( "could not allocate memory for VMA list\n");
++        vma_list.list_end = vma_list.base;
++        vma_list.alloc_end = vma_list.base + max_count;
++
++        scan_vma( &vma_list, &max_count );
++        if (vma_list.list_end - vma_list.base == max_count)
++        {
++            wld_memmove(listp, &vma_list, sizeof(*listp));
++            break;
++        }
++
++        free_vma_list( &vma_list );
++    }
++}
++
++static void map_reserve_preload_ranges( const struct vma_area_list *vma_list,
++                                        const struct stackarg_info *stackinfo )
++{
++    size_t i;
++    unsigned long exclude_start = (unsigned long)stackinfo->stack - 1;
++    unsigned long exclude_end = (unsigned long)stackinfo->auxv + 1;
++
++    for (i = 0; preload_info[i].size; i++)
++    {
++        if (exclude_end   >  (unsigned long)preload_info[i].addr &&
++            exclude_start <= (unsigned long)preload_info[i].addr + preload_info[i].size - 1)
++        {
++            remove_preload_range( i );
++            i--;
++        }
++        else if (map_reserve_unmapped_range( vma_list, preload_info[i].addr, preload_info[i].size ) < 0)
++        {
++            /* don't warn for low 64k */
++            if (preload_info[i].addr >= (void *)0x10000
++#ifdef __aarch64__
++                && preload_info[i].addr < (void *)0x7fffffffff /* ARM64 address space might end here*/
++#endif
++            )
++                wld_printf( "preloader: Warning: failed to reserve range %p-%p\n",
++                            preload_info[i].addr, (char *)preload_info[i].addr + preload_info[i].size );
++            remove_preload_range( i );
++            i--;
++        }
++    }
++}
++
+ 
+ /*
+  *  wld_start
+@@ -1538,6 +1841,7 @@ void* wld_start( void **stack )
+     struct wld_link_map main_binary_map, ld_so_map;
+     struct wine_preload_info **wine_main_preload_info;
+     struct preloader_state state = { 0 };
++    struct vma_area_list vma_list = { NULL };
+ 
+     parse_stackargs( &state.s, *stack );
+ 
+@@ -1566,29 +1870,9 @@ void* wld_start( void **stack )
+     /* reserve memory that Wine needs */
+     reserve = stackargs_getenv( &state.s, "WINEPRELOADRESERVE" );
+     if (reserve) preload_reserve( reserve );
+-    for (i = 0; preload_info[i].size; i++)
+-    {
+-        if ((char *)state.s.auxv  >= (char *)preload_info[i].addr &&
+-            (char *)state.s.stack <= (char *)preload_info[i].addr + preload_info[i].size)
+-        {
+-            remove_preload_range( i );
+-            i--;
+-        }
+-        else if (wld_mmap( preload_info[i].addr, preload_info[i].size, PROT_NONE,
+-                           MAP_FIXED | MAP_PRIVATE | MAP_ANON | MAP_NORESERVE, -1, 0 ) == (void *)-1)
+-        {
+-            /* don't warn for low 64k */
+-            if (preload_info[i].addr >= (void *)0x10000
+-#ifdef __aarch64__
+-                && preload_info[i].addr < (void *)0x7fffffffff /* ARM64 address space might end here*/
+-#endif
+-            )
+-                wld_printf( "preloader: Warning: failed to reserve range %p-%p\n",
+-                            preload_info[i].addr, (char *)preload_info[i].addr + preload_info[i].size );
+-            remove_preload_range( i );
+-            i--;
+-        }
+-    }
++
++    alloc_scan_vma( &vma_list );
++    map_reserve_preload_ranges( &vma_list, &state.s );
+ 
+     /* add an executable page at the top of the address space to defeat
+      * broken no-exec protections that play with the code selector limit */
+@@ -1649,6 +1933,8 @@ void* wld_start( void **stack )
+     }
+ #endif
+ 
++    free_vma_list( &vma_list );
++
+     *stack = state.s.stack;
+     return (void *)ld_so_map.l_entry;
+ }
+-- 
+2.31.1
+

@@ -1,0 +1,101 @@
+From: David Kahurani <k.kahurani@gmail.com>
+Subject: [PATCH] taskmgr: Select process on switch from application to process
+Message-Id: <20211224112454.1062189-1-k.kahurani@gmail.com>
+Date: Fri, 24 Dec 2021 14:24:54 +0300
+
+Signed-off-by: David Kahurani <k.kahurani@gmail.com>
+---
+ programs/taskmgr/applpage.c | 22 ++++++++++++++--------
+ programs/taskmgr/perfdata.c | 21 +++++++++++++++++++++
+ programs/taskmgr/perfdata.h |  1 +
+ 3 files changed, 36 insertions(+), 8 deletions(-)
+
+diff --git a/programs/taskmgr/applpage.c b/programs/taskmgr/applpage.c
+index b35881c2..0cf9f48d 100644
+--- a/programs/taskmgr/applpage.c
++++ b/programs/taskmgr/applpage.c
+@@ -28,6 +28,7 @@
+ #include <commctrl.h>
+ 
+ #include "taskmgr.h"
++#include "perfdata.h"
+ 
+ typedef struct
+ {
+@@ -790,15 +791,20 @@ void ApplicationPage_OnGotoProcess(void)
+     }
+     if (pAPLI) {
+         DWORD   dwProcessId;
++	int index;
++	memset(&item, 0, sizeof(LV_ITEMW));
++	item.state = LVIS_SELECTED | LVIS_FOCUSED;
++	item.stateMask = LVIS_SELECTED | LVIS_FOCUSED;
+ 
+-        GetWindowThreadProcessId(pAPLI->hWnd, &dwProcessId);
+-        /*
+-         * Switch to the process tab
+-         */
+-        SendMessageW(hTabWnd, TCM_SETCURFOCUS, 1, 0);
+-        /*
+-         * FIXME: Select the process item in the list
+-         */
++	GetWindowThreadProcessId(pAPLI->hWnd, &dwProcessId);
++	/*
++	 *  Switch to the process tab
++	 */
++	SendMessageW(hTabWnd, TCM_SETCURFOCUS, 1, 0);
++
++	index = PerfDataGetProcessIndex(dwProcessId);
++
++	SendMessageW(hProcessPageListCtrl, LVM_SETITEMSTATE, index, (LPARAM) &item);
+     }
+ }
+ 
+diff --git a/programs/taskmgr/perfdata.c b/programs/taskmgr/perfdata.c
+index 4498a2fe..e8dc8900 100644
+--- a/programs/taskmgr/perfdata.c
++++ b/programs/taskmgr/perfdata.c
+@@ -356,6 +356,27 @@ ULONG PerfDataGetProcessId(ULONG Index)
+     return ProcessId;
+ }
+ 
++ULONG PerfDataGetProcessIndex(ULONG ProcessId)
++{
++    ULONG index;
++
++    EnterCriticalSection(&PerfDataCriticalSection);
++
++    for(index=0; index<ProcessCount; index++)
++    {
++	    if(pPerfData[index].ProcessId == ProcessId)
++		    break;
++    }
++
++    LeaveCriticalSection(&PerfDataCriticalSection);
++
++    if (index == ProcessCount)
++	    return 0;
++    else
++	    return index;
++}
++
++
+ BOOL PerfDataGetUserName(ULONG Index, LPWSTR lpUserName, int nMaxCount)
+ {
+     BOOL    bSuccessful;
+diff --git a/programs/taskmgr/perfdata.h b/programs/taskmgr/perfdata.h
+index 615e7db2..ffc1d2d6 100644
+--- a/programs/taskmgr/perfdata.h
++++ b/programs/taskmgr/perfdata.h
+@@ -75,6 +75,7 @@ ULONG	PerfDataGetProcessorSystemUsage(void);
+ 
+ BOOL	PerfDataGetImageName(ULONG Index, LPWSTR lpImageName, int nMaxCount);
+ ULONG	PerfDataGetProcessId(ULONG Index);
++ULONG   PerfDataGetProcessIndex(ULONG ProcessId);
+ BOOL	PerfDataGetUserName(ULONG Index, LPWSTR lpUserName, int nMaxCount);
+ ULONG	PerfDataGetSessionId(ULONG Index);
+ ULONG	PerfDataGetCPUUsage(ULONG Index);
+
+-- 
+2.25.1
+

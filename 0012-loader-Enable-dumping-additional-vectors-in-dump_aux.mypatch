@@ -1,0 +1,31 @@
+From 8b518376e059b2c670961e920b12483aab807cf4 Mon Sep 17 00:00:00 2001
+From: Jinoh Kang <jinoh.kang.kr@gmail.com>
+Date: Wed, 29 Dec 2021 23:36:52 +0900
+Subject: [PATCH 12/13] loader: Enable dumping additional vectors in
+ dump_auxiliary.
+To: wine-devel@winehq.org
+
+Signed-off-by: Jinoh Kang <jinoh.kang.kr@gmail.com>
+---
+ loader/preloader.c | 5 +++++
+ 1 file changed, 5 insertions(+)
+
+diff --git a/loader/preloader.c b/loader/preloader.c
+index 69a14c27b91..775661a0735 100644
+--- a/loader/preloader.c
++++ b/loader/preloader.c
+@@ -1101,6 +1101,11 @@ static void dump_auxiliary( struct wld_auxv *av )
+         NAME(AT_SYSINFO),
+         NAME(AT_SYSINFO_EHDR),
+         NAME(AT_UID),
++        NAME(AT_SECURE),
++        NAME(AT_RANDOM),
++        NAME(AT_HWCAP2),
++        NAME(AT_EXECFN),
++        NAME(AT_MINSIGSTKSZ),
+         { 0, NULL }
+     };
+ #undef NAME
+-- 
+2.31.1
+

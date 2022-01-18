@@ -1,0 +1,40 @@
+From: Dmitry Timoshkov <dmitry@baikal.ru>
+Subject: [PATCH 2/2] dwrite: Add Segoe UI Symbol fallback ranges.
+Message-Id: <20211227144619.35b4939087170f5e86ce7f82@baikal.ru>
+Date: Mon, 27 Dec 2021 14:46:19 +0300
+
+Signed-off-by: Dmitry Timoshkov <dmitry@baikal.ru>
+---
+ dlls/dwrite/analyzer.c     | 8 ++++++++
+ dlls/dwrite/tests/layout.c | 5 ++---
+ 2 files changed, 10 insertions(+), 3 deletions(-)
+
+diff --git a/dlls/dwrite/analyzer.c b/dlls/dwrite/analyzer.c
+index 13ccf8e4434..a169b8ef860 100644
+--- a/dlls/dwrite/analyzer.c
++++ b/dlls/dwrite/analyzer.c
+@@ -220,6 +220,13 @@ static const DWRITE_UNICODE_RANGE cjk_ranges[] =
+     { 0x4e00, 0x9fff }, /* CJK Unified Ideographs */
+ };
+ 
++static const WCHAR *SegoeUI_Symbol_families[] = { L"Segoe UI Symbol" };
++
++static const DWRITE_UNICODE_RANGE SegoeUI_Symbol_ranges[] =
++{
++    { 0x2196, 0x2bef },
++};
++
+ struct fallback_mapping {
+     DWRITE_UNICODE_RANGE *ranges;
+     UINT32 ranges_count;
+@@ -236,6 +243,7 @@ static const struct fallback_mapping fontfallback_neutral_data[] = {
+           (WCHAR **)families, ARRAY_SIZE(families) }
+ 
+     MAPPING_RANGE(cjk_ranges, cjk_families),
++    MAPPING_RANGE(SegoeUI_Symbol_ranges, SegoeUI_Symbol_families),
+ 
+ #undef MAPPING_RANGE
+ };
+-- 
+2.34.1
+

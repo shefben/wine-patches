@@ -1,0 +1,131 @@
+From: Vijay Kiran Kamuju <infyquest@gmail.com>
+Subject: [PATCH] uiautomationcore: Add stub UiaNodeFromFocus function.
+Message-Id: <CACfa+K+PK3osOxiNas3NP=2Ls+W0-fcfOvCxE=3ND1=8UbLtGw@mail.gmail.com>
+Date: Sat, 30 Jan 2021 18:43:03 +0100
+
+Wine-Bug: https://bugs.winehq.org/show_bug.cgi?id=50576
+Signed-off-by: Vijay Kiran Kamuju <infyquest@gmail.com>
+
+<div dir="ltr">Wine-Bug: <a href="https://bugs.winehq.org/show_bug.cgi?id=50576">https://bugs.winehq.org/show_bug.cgi?id=50576</a><br>Signed-off-by: Vijay Kiran Kamuju &lt;<a href="mailto:infyquest@gmail.com">infyquest@gmail.com</a>&gt;<br></div>
+
+From ba434e8b24f42389683b09ddb99f4ec412ae2db7 Mon Sep 17 00:00:00 2001
+From: Vijay Kiran Kamuju <infyquest@gmail.com>
+Date: Sat, 30 Jan 2021 18:33:40 +0100
+Subject: [PATCH] uiautomationcore: Add stub UiaNodeFromFocus function.
+
+Wine-Bug: https://bugs.winehq.org/show_bug.cgi?id=50576
+Signed-off-by: Vijay Kiran Kamuju <infyquest@gmail.com>
+---
+ dlls/uiautomationcore/uia_main.c            |  8 ++++
+ dlls/uiautomationcore/uiautomationcore.spec |  2 +-
+ include/uiautomationcoreapi.h               | 45 +++++++++++++++++++++
+ 3 files changed, 54 insertions(+), 1 deletion(-)
+
+diff --git a/dlls/uiautomationcore/uia_main.c b/dlls/uiautomationcore/uia_main.c
+index 77460aa174c..49fc97748b9 100644
+--- a/dlls/uiautomationcore/uia_main.c
++++ b/dlls/uiautomationcore/uia_main.c
+@@ -104,3 +104,11 @@ HRESULT WINAPI UiaHostProviderFromHwnd(HWND hwnd, IRawElementProviderSimple **pr
+     FIXME("(%p, %p): stub\n", hwnd, provider);
+     return E_NOTIMPL;
+ }
++
++HRESULT WINAPI UiaNodeFromFocus(UiaCacheRequest *request, SAFEARRAY **data, BSTR *tree)
++{
++    FIXME("(%p, %p, %p): stub\n", request, data, tree);
++
++    *tree = NULL;
++    return S_OK;
++}
+diff --git a/dlls/uiautomationcore/uiautomationcore.spec b/dlls/uiautomationcore/uiautomationcore.spec
+index 5da89c3451c..f3bfb500c8b 100644
+--- a/dlls/uiautomationcore/uiautomationcore.spec
++++ b/dlls/uiautomationcore/uiautomationcore.spec
+@@ -76,7 +76,7 @@
+ #@ stub UiaIAccessibleFromProvider
+ @ stdcall UiaLookupId(long ptr)
+ @ stub UiaNavigate
+-@ stub UiaNodeFromFocus
++@ stdcall UiaNodeFromFocus(ptr ptr ptr)
+ @ stub UiaNodeFromHandle
+ @ stub UiaNodeFromPoint
+ @ stub UiaNodeFromProvider
+diff --git a/include/uiautomationcoreapi.h b/include/uiautomationcoreapi.h
+index de486710158..7eda5e5c3cd 100644
+--- a/include/uiautomationcoreapi.h
++++ b/include/uiautomationcoreapi.h
+@@ -39,6 +39,12 @@ DECLARE_HANDLE(HUIAPATTERNOBJECT);
+ DECLARE_HANDLE(HUIATEXTRANGE);
+ DECLARE_HANDLE(HUIAEVENT);
+ 
++enum AutomationElementMode
++{
++    AutomationElementMode_None,
++    AutomationElementMode_Full
++};
++
+ enum AutomationIdentifierType
+ {
+     AutomationIdentifierType_Property,
+@@ -52,6 +58,16 @@ enum AutomationIdentifierType
+     AutomationIdentifierType_Style
+ };
+ 
++enum ConditionType
++{
++    ConditionType_True = 0,
++    ConditionType_False = 1,
++    ConditionType_Property = 2,
++    ConditionType_And = 3,
++    ConditionType_Or = 4,
++    ConditionType_Not = 5
++};
++
+ enum ProviderType
+ {
+     ProviderType_BaseHwnd,
+@@ -59,11 +75,40 @@ enum ProviderType
+     ProviderType_NonClientArea,
+ };
+ 
++enum TreeScope
++{
++    TreeScope_None,
++    TreeScope_Element,
++    TreeScope_Children,
++    TreeScope_Descendents,
++    TreeScope_Parent,
++    TreeScope_Ancestors,
++    TreeScope_Subtree
++};
++
++typedef struct
++{
++    enum ConditionType ConditionType;
++} UiaCondition;
++
++typedef struct
++{
++    UiaCondition *pViewCondition;
++    enum TreeScope Scope;
++
++    PROPERTYID *pProperties;
++    int cProperties;
++    PATTERNID *pPatterns;
++    int cPatterns;
++    enum AutomationElementMode automationElementMode;
++} UiaCacheRequest;
++
+ typedef SAFEARRAY * WINAPI UiaProviderCallback(HWND hwnd,enum ProviderType providerType);
+ 
+ HRESULT WINAPI UiaGetReservedMixedAttributeValue(IUnknown **value);
+ HRESULT WINAPI UiaGetReservedNotSupportedValue(IUnknown **value);
+ int WINAPI UiaLookupId(enum AutomationIdentifierType type, const GUID *guid);
++HRESULT WINAPI UiaNodeFromFocus(UiaCacheRequest *pRequest, SAFEARRAY **ppRequestData, BSTR *ppTreeStructure);
+ BOOL WINAPI UiaPatternRelease(HUIAPATTERNOBJECT hobj);
+ HRESULT WINAPI UiaRaiseAutomationEvent(IRawElementProviderSimple *provider, EVENTID id);
+ void WINAPI UiaRegisterProviderCallback(UiaProviderCallback *pCallback);
+
+-- 
+2.30.0
+

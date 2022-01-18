@@ -1,0 +1,27 @@
+From: "Bernhard Übelacker" <bernhardu@mailbox.org>
+Subject: [PATCH 1/2] widl: Define _WIN64 for 64-bit targets.
+Message-Id: <20211222223411.592596-1-bernhardu@mailbox.org>
+Date: Wed, 22 Dec 2021 23:34:10 +0100
+
+Signed-off-by: Bernhard Übelacker <bernhardu@mailbox.org>
+---
+ tools/widl/widl.c | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/tools/widl/widl.c b/tools/widl/widl.c
+index 0b5f07236f0..d241e046846 100644
+--- a/tools/widl/widl.c
++++ b/tools/widl/widl.c
+@@ -849,6 +849,8 @@ int main(int argc,char *argv[])
+ 
+   add_widl_version_define();
+   wpp_add_cmdline_define("_WIN32=1");
++  if (pointer_size == 8)
++    wpp_add_cmdline_define("_WIN64=1");
+ 
+   atexit(rm_tempfile);
+   if (!no_preprocess)
+
+-- 
+2.34.1
+

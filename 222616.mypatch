@@ -1,0 +1,226 @@
+From: Dongwan Kim <kdw6485@gmail.com>
+Subject: [PATCH v9 1/3] ntdll: sock_recv keeps message ordered
+Message-Id: <20211224075936.155765-1-kdw6485@gmail.com>
+Date: Fri, 24 Dec 2021 16:59:34 +0900
+
+Calling try_recv could make messages misordered.
+
+Suppose that a server program calls a overlapped WSARecv
+and its operation is pending.
+Another program sends a message and wineserver is busy.
+The server program calls another overlapped WSARecv and
+it intercepts the message for the pending WSARecv.
+
+The problem already had been discussed here
+https://www.winehq.org/pipermail/wine-devel/2021-May/186612.html
+
+To avoid this situation, this kind of approach can be applied.
+
+The server program needs to know if there are pending asyncs
+before calling try_recv.
+
+Signed-off-by: Dongwan Kim <kdw6485@gmail.com>
+---
+ dlls/ntdll/unix/socket.c       | 20 +++++++++++++++++++-
+ include/wine/server_protocol.h | 16 ++++++++++++++++
+ server/request.h               |  7 +++++++
+ server/sock.c                  | 26 ++++++++++++++++++++++++++
+ server/trace.c                 | 13 +++++++++++++
+ 5 files changed, 81 insertions(+), 1 deletion(-)
+
+diff --git a/dlls/ntdll/unix/socket.c b/dlls/ntdll/unix/socket.c
+--- a/dlls/ntdll/unix/socket.c
++++ b/dlls/ntdll/unix/socket.c
+@@ -673,6 +673,21 @@ static BOOL async_recv_proc( void *user, ULONG_PTR *info, NTSTATUS *status )
+     release_fileio( &async->io );
+     return TRUE;
+ }
++static int query_asyncs_queued( HANDLE sock, int type  )
++{
++    int result=0;
++
++    SERVER_START_REQ( query_async_waiting )
++    {
++        req->handle  = wine_server_obj_handle( sock );
++        req->type   = type;
++        wine_server_call(req);
++        result =  reply->state;
++    }
++    SERVER_END_REQ;
++    return result;
++
++}
+ 
+ static NTSTATUS sock_recv( HANDLE handle, HANDLE event, PIO_APC_ROUTINE apc, void *apc_user, IO_STATUS_BLOCK *io,
+                            int fd, const void *buffers_ptr, unsigned int count, WSABUF *control,
+@@ -735,7 +750,10 @@ static NTSTATUS sock_recv( HANDLE handle, HANDLE event, PIO_APC_ROUTINE apc, voi
+         }
+     }
+ 
+-    status = try_recv( fd, async, &information );
++    if( force_async && query_asyncs_queued( handle , ASYNC_TYPE_READ ))
++      status = STATUS_DEVICE_NOT_READY;
++    else
++      status = try_recv( fd, async, &information );
+ 
+     if (status != STATUS_SUCCESS && status != STATUS_BUFFER_OVERFLOW && status != STATUS_DEVICE_NOT_READY)
+     {
+diff --git a/include/wine/server_protocol.h b/include/wine/server_protocol.h
+index 1d17a40530f..104e3b4cd3c 100644
+--- a/include/wine/server_protocol.h
++++ b/include/wine/server_protocol.h
+@@ -5440,6 +5440,19 @@ struct get_next_thread_reply
+     obj_handle_t handle;
+     char __pad_12[4];
+ };
++struct query_async_waiting_request
++{
++    struct request_header __header;
++    obj_handle_t  handle;
++    int type;
++    char __pad_20[4]; 
++};
++struct query_async_waiting_reply
++{
++    struct reply_header __header;
++    int state;
++    char __pad_12[4];
++};
+ 
+ enum esync_type
+ {
+@@ -5804,6 +5817,7 @@ enum request
+     REQ_suspend_process,
+     REQ_resume_process,
+     REQ_get_next_thread,
++    REQ_query_async_waiting,
+     REQ_create_esync,
+     REQ_open_esync,
+     REQ_get_esync_fd,
+@@ -6091,6 +6105,7 @@ union generic_request
+     struct suspend_process_request suspend_process_request;
+     struct resume_process_request resume_process_request;
+     struct get_next_thread_request get_next_thread_request;
++    struct query_async_waiting_request query_async_waiting_request;
+     struct create_esync_request create_esync_request;
+     struct open_esync_request open_esync_request;
+     struct get_esync_fd_request get_esync_fd_request;
+@@ -6376,6 +6391,7 @@ union generic_reply
+     struct suspend_process_reply suspend_process_reply;
+     struct resume_process_reply resume_process_reply;
+     struct get_next_thread_reply get_next_thread_reply;
++    struct query_async_waiting_reply query_async_waiting_reply;
+     struct create_esync_reply create_esync_reply;
+     struct open_esync_reply open_esync_reply;
+     struct get_esync_fd_reply get_esync_fd_reply;
+diff --git a/server/request.h b/server/request.h
+index 3c455799d54..e26dbaae0f3 100644
+--- a/server/request.h
++++ b/server/request.h
+@@ -394,6 +394,7 @@ DECL_HANDLER(terminate_job);
+ DECL_HANDLER(suspend_process);
+ DECL_HANDLER(resume_process);
+ DECL_HANDLER(get_next_thread);
++DECL_HANDLER(query_async_waiting);
+ DECL_HANDLER(create_esync);
+ DECL_HANDLER(open_esync);
+ DECL_HANDLER(get_esync_fd);
+@@ -680,6 +681,7 @@ static const req_handler req_handlers[REQ_NB_REQUESTS] =
+     (req_handler)req_suspend_process,
+     (req_handler)req_resume_process,
+     (req_handler)req_get_next_thread,
++    (req_handler)req_query_async_waiting,
+     (req_handler)req_create_esync,
+     (req_handler)req_open_esync,
+     (req_handler)req_get_esync_fd,
+@@ -2259,6 +2261,11 @@ C_ASSERT( FIELD_OFFSET(struct get_next_thread_request, flags) == 28 );
+ C_ASSERT( sizeof(struct get_next_thread_request) == 32 );
+ C_ASSERT( FIELD_OFFSET(struct get_next_thread_reply, handle) == 8 );
+ C_ASSERT( sizeof(struct get_next_thread_reply) == 16 );
++C_ASSERT( FIELD_OFFSET(struct query_async_waiting_request, handle) == 12 );
++C_ASSERT( FIELD_OFFSET(struct query_async_waiting_request, type) == 16 );
++C_ASSERT( sizeof(struct query_async_waiting_request) == 24 );
++C_ASSERT( FIELD_OFFSET(struct query_async_waiting_reply, state) == 8 );
++C_ASSERT( sizeof(struct query_async_waiting_reply) == 16 );
+ C_ASSERT( FIELD_OFFSET(struct create_esync_request, access) == 12 );
+ C_ASSERT( FIELD_OFFSET(struct create_esync_request, initval) == 16 );
+ C_ASSERT( FIELD_OFFSET(struct create_esync_request, type) == 20 );
+diff --git a/server/sock.c b/server/sock.c
+index 2df4f3d3056..d3e3b4cd847 100644
+--- a/server/sock.c
++++ b/server/sock.c
+@@ -3520,3 +3520,29 @@ DECL_HANDLER(send_socket)
+     }
+     release_object( sock );
+ }
++
++DECL_HANDLER( query_async_waiting )
++{
++  struct sock *sock;
++  struct async *async;
++  reply->state = 0;
++
++  if (!(sock = (struct sock *)get_handle_obj( current->process, req->handle,
++          FILE_READ_ATTRIBUTES, &sock_ops))) return;
++  if (get_unix_fd( sock->fd ) == -1) return;
++
++  if (is_fd_overlapped( sock->fd ))
++  {
++    if(req->type == ASYNC_TYPE_READ  &&  ( async = find_pending_async(&sock->read_q) )) {
++      reply->state = 1;
++      release_object(async);
++    }
++    if(req->type == ASYNC_TYPE_WRITE && ( async = find_pending_async(&sock->write_q )) )
++    {
++      reply->state = 1;
++      release_object(async);
++    }
++  }
++  release_object( &sock->obj );
++
++}
+diff --git a/server/trace.c b/server/trace.c
+index a48f00258fe..32f236b2b5a 100644
+--- a/server/trace.c
++++ b/server/trace.c
+@@ -4553,6 +4553,16 @@ static void dump_get_next_thread_reply( const struct get_next_thread_reply *req
+     fprintf( stderr, " handle=%04x", req->handle );
+ }
+ 
++static void dump_query_async_waiting_request( const struct query_async_waiting_request *req )
++{
++    fprintf( stderr, " handle=%04x", req->handle );
++    fprintf( stderr, ", type=%d", req->type );
++}
++static void dump_query_async_waiting_reply( const struct query_async_waiting_reply *req )
++{
++    fprintf( stderr, " state=%d", req->state );
++}
++
+ static void dump_create_esync_request( const struct create_esync_request *req )
+ {
+     fprintf( stderr, " access=%08x", req->access );
+@@ -4881,6 +4891,7 @@ static const dump_func req_dumpers[REQ_NB_REQUESTS] = {
+     (dump_func)dump_suspend_process_request,
+     (dump_func)dump_resume_process_request,
+     (dump_func)dump_get_next_thread_request,
++    (dump_func)dump_query_async_waiting_request,
+     (dump_func)dump_create_esync_request,
+     (dump_func)dump_open_esync_request,
+     (dump_func)dump_get_esync_fd_request,
+@@ -5164,6 +5175,7 @@ static const dump_func reply_dumpers[REQ_NB_REQUESTS] = {
+     NULL,
+     NULL,
+     (dump_func)dump_get_next_thread_reply,
++    (dump_func)dump_query_async_waiting_reply,
+     (dump_func)dump_create_esync_reply,
+     (dump_func)dump_open_esync_reply,
+     (dump_func)dump_get_esync_fd_reply,
+@@ -5447,6 +5459,7 @@ static const char * const req_names[REQ_NB_REQUESTS] = {
+     "suspend_process",
+     "resume_process",
+     "get_next_thread",
++    "query_async_waiting",
+     "create_esync",
+     "open_esync",
+     "get_esync_fd",

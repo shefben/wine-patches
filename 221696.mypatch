@@ -1,0 +1,404 @@
+From: Eric Pouech <eric.pouech@gmail.com>
+Subject: [PATCH 15/19] programs/winedbg: cache pointer type:s
+Message-Id: <163897110882.528091.11430432406826946208.stgit@euterpe>
+Date: Wed,  8 Dec 2021 14:45:08 +0100
+In-Reply-To: <163897087724.528091.10090935688970751662.stgit@euterpe>
+References: <163897087724.528091.10090935688970751662.stgit@euterpe>
+
+this doesn't require searching debuggee's type when taking address of an
+expression
+not to mention, this search could also fail
+
+Signed-off-by: Eric Pouech <eric.pouech@gmail.com>
+
+---
+ programs/winedbg/debugger.h |    6 ++
+ programs/winedbg/expr.c     |   17 ++---
+ programs/winedbg/types.c    |  135 +++++++++++++++++++++++++++----------------
+ programs/winedbg/winedbg.c  |    3 +
+ 4 files changed, 99 insertions(+), 62 deletions(-)
+
+diff --git a/programs/winedbg/debugger.h b/programs/winedbg/debugger.h
+index f74ddfc210f..a29b731017f 100644
+--- a/programs/winedbg/debugger.h
++++ b/programs/winedbg/debugger.h
+@@ -67,6 +67,7 @@ enum dbg_line_status
+ 
+ enum dbg_internal_types
+ {
++    dbg_itype_pointers          = 0xf0000000,
+     dbg_itype_first             = 0xffffff00,
+     dbg_itype_unsigned_int,
+     dbg_itype_signed_int,
+@@ -265,6 +266,8 @@ struct dbg_process
+     char                        source_current_file[MAX_PATH];
+     int                         source_start_line;
+     int                         source_end_line;
++    struct dbg_type*            pointers_type;
++    unsigned                    num_pointers_type;
+ };
+ 
+ /* describes the way the debugger interacts with a given process */
+@@ -493,8 +496,9 @@ extern BOOL             types_store_value(struct dbg_lvalue* lvalue_to, const st
+ extern BOOL             types_udt_find_element(struct dbg_lvalue* value, const char* name);
+ extern BOOL             types_array_index(const struct dbg_lvalue* value, int index, struct dbg_lvalue* result);
+ extern BOOL             types_get_info(const struct dbg_type*, IMAGEHLP_SYMBOL_TYPE_INFO, void*);
++extern BOOL             types_get_type(const struct dbg_type*, struct dbg_type* ret);
+ extern BOOL             types_get_real_type(struct dbg_type* type, DWORD* tag);
+-extern struct dbg_type  types_find_pointer(const struct dbg_type* type);
++extern BOOL             types_find_pointer(const struct dbg_type* type, struct dbg_type* pttype);
+ extern struct dbg_type  types_find_type(DWORD64 linear, const char* name, enum SymTagEnum tag);
+ extern BOOL             types_compare(const struct dbg_type, const struct dbg_type, BOOL* equal);
+ extern BOOL             types_is_integral_type(const struct dbg_lvalue*);
+diff --git a/programs/winedbg/expr.c b/programs/winedbg/expr.c
+index 5d9ef30ad13..bd48e3e868f 100644
+--- a/programs/winedbg/expr.c
++++ b/programs/winedbg/expr.c
+@@ -325,8 +325,7 @@ struct dbg_lvalue expr_eval(struct expr* exp)
+         }
+         for (i = 0; i < exp->un.cast.cast_to.deref_count; i++)
+         {
+-            rtn.type = types_find_pointer(&rtn.type);
+-            if (rtn.type.id == dbg_itype_none)
++            if (!types_find_pointer(&rtn.type, &rtn.type))
+             {
+                 dbg_printf("Cannot find pointer type\n");
+                 RaiseException(DEBUG_STATUS_BAD_TYPE, 0, 0, NULL);
+@@ -442,8 +441,7 @@ struct dbg_lvalue expr_eval(struct expr* exp)
+ #endif
+         init_lvalue_in_debugger(&rtn, dbg_itype_none, &exp->un.call.result);
+         /* get return type from function signature type */
+-        /* FIXME rtn.type.module should be set to function's module... */
+-        types_get_info(&rtn.type, TI_GET_TYPE, &rtn.type.id);
++        types_get_type(&rtn.type, &rtn.type);
+         break;
+     case EXPR_TYPE_INTVAR:
+         if (!(div = dbg_get_internal_var(exp->un.intvar.name)))
+@@ -463,11 +461,11 @@ struct dbg_lvalue expr_eval(struct expr* exp)
+ 	case EXP_OP_ADD:
+             if (!types_get_info(&exp1.type, TI_GET_SYMTAG, &tag) ||
+                 tag != SymTagPointerType ||
+-                !types_get_info(&exp1.type, TI_GET_TYPE, &type1.id))
++                !types_get_type(&exp1.type, &type1))
+                 type1.id = dbg_itype_none;
+             if (!types_get_info(&exp2.type, TI_GET_SYMTAG, &tag) ||
+                 tag != SymTagPointerType ||
+-                !types_get_info(&exp2.type, TI_GET_TYPE, &type2.id))
++                !types_get_type(&exp2.type, &type2))
+                 type2.id = dbg_itype_none;
+             scale1 = 1;
+             scale2 = 1;
+@@ -489,11 +487,11 @@ struct dbg_lvalue expr_eval(struct expr* exp)
+ 	case EXP_OP_SUB:
+             if (!types_get_info(&exp1.type, TI_GET_SYMTAG, &tag) ||
+                 tag != SymTagPointerType ||
+-                !types_get_info(&exp1.type, TI_GET_TYPE, &type1.id))
++                !types_get_type(&exp1.type, &type1))
+                 type1.id = dbg_itype_none;
+             if (!types_get_info(&exp2.type, TI_GET_SYMTAG, &tag) ||
+                 tag != SymTagPointerType ||
+-                !types_get_info(&exp2.type, TI_GET_TYPE, &type2.id))
++                !types_get_type(&exp2.type, &type2))
+                 type2.id = dbg_itype_none;
+             scale1 = 1;
+             scale2 = 1;
+@@ -610,8 +608,7 @@ struct dbg_lvalue expr_eval(struct expr* exp)
+             if (exp1.addr.Mode != AddrModeFlat)
+                 RaiseException(DEBUG_STATUS_CANT_DEREF, 0, 0, NULL);
+             exp->un.unop.result = (ULONG_PTR)memory_to_linear_addr(&exp1.addr);
+-            rtn.type = types_find_pointer(&exp1.type);
+-            if (rtn.type.id == dbg_itype_none)
++            if (!types_find_pointer(&exp1.type, &rtn.type))
+                 RaiseException(DEBUG_STATUS_CANT_DEREF, 0, 0, NULL);
+             break;
+ 	default: RaiseException(DEBUG_STATUS_INTERNAL_ERROR, 0, 0, NULL);
+diff --git a/programs/winedbg/types.c b/programs/winedbg/types.c
+index 3aefbe03058..5633201d2fe 100644
+--- a/programs/winedbg/types.c
++++ b/programs/winedbg/types.c
+@@ -42,7 +42,7 @@ BOOL types_get_real_type(struct dbg_type* type, DWORD* tag)
+         if (!types_get_info(type, TI_GET_SYMTAG, tag))
+             return FALSE;
+         if (*tag != SymTagTypedef) return TRUE;
+-    } while (types_get_info(type, TI_GET_TYPE, &type->id));
++    } while (types_get_type(type, type));
+     return FALSE;
+ }
+ 
+@@ -195,9 +195,8 @@ static BOOL types_get_udt_element_lvalue(struct dbg_lvalue* lvalue, const struct
+     DWORD       offset, bitoffset;
+     DWORD64     length;
+ 
+-    types_get_info(type, TI_GET_TYPE, &lvalue->type.id);
+-    lvalue->type.module = type->module;
+-    if (!types_get_info(type, TI_GET_OFFSET, &offset)) return FALSE;
++    if (!types_get_type(type, &lvalue->type) ||
++        !types_get_info(type, TI_GET_OFFSET, &offset)) return FALSE;
+     lvalue->addr.Offset += offset;
+ 
+     if (types_get_info(type, TI_GET_BITPOSITION, &bitoffset))
+@@ -301,8 +300,7 @@ BOOL types_array_index(const struct dbg_lvalue* lvalue, int index, struct dbg_lv
+     /*
+      * Get the base type, so we know how much to index by.
+      */
+-    if (!types_get_info(&type, TI_GET_TYPE, &result->type.id)) return FALSE;
+-    result->type.module = type.module;
++    if (!types_get_type(&type, &result->type)) return FALSE;
+     if (index)
+     {
+         DWORD64             length;
+@@ -341,8 +339,6 @@ static BOOL CALLBACK types_cb(PSYMBOL_INFO sym, ULONG size, void* _user)
+ {
+     struct type_find_t* user = _user;
+     BOOL                ret = TRUE;
+-    struct dbg_type     type;
+-    DWORD               type_id;
+ 
+     if (sym->Tag == user->tag)
+     {
+@@ -355,15 +351,6 @@ static BOOL CALLBACK types_cb(PSYMBOL_INFO sym, ULONG size, void* _user)
+                 ret = FALSE;
+             }
+             break;
+-        case SymTagPointerType:
+-            type.module = sym->ModBase;
+-            type.id = sym->TypeIndex;
+-            if (types_get_info(&type, TI_GET_TYPE, &type_id) && type_id == user->u.typeid)
+-            {
+-                user->result = sym->TypeIndex;
+-                ret = FALSE;
+-            }
+-            break;
+         default: break;
+         }
+     }
+@@ -373,21 +360,40 @@ static BOOL CALLBACK types_cb(PSYMBOL_INFO sym, ULONG size, void* _user)
+ /******************************************************************
+  *		types_find_pointer
+  *
+- * Should look up in module based at linear whether (typeid*) exists
+- * Otherwise, we could create it locally
++ * There's no way in dbghelp for looking up the pointer type of a given type
++ * - SymEnumTypes would do, but it'll enumerate all types, which could be long
++ * - but more impacting, there's no guarantee such a type exists
++ * Hence, we create a cache of all needed pointer types.
++ * That's cumbersome as we end up with dbg_type in different modules (types_get_type()
++ * must be used for querying TI_GET_TYPE instead of types_get_info).
+  */
+-struct dbg_type types_find_pointer(const struct dbg_type* type)
++BOOL types_find_pointer(const struct dbg_type* type, struct dbg_type* ret)
+ {
+-    struct type_find_t  f;
+-    struct dbg_type     ret;
++    unsigned i;
++    struct dbg_type* new;
+ 
+-    f.result = dbg_itype_none;
+-    f.tag = SymTagPointerType;
+-    f.u.typeid = type->id;
+-    SymEnumTypes(dbg_curr_process->handle, type->module, types_cb, &f);
+-    ret.module = type->module;
+-    ret.id = f.result;
+-    return ret;
++    if (!dbg_curr_process) return FALSE;
++    for (i = 0; i < dbg_curr_process->num_pointers_type; i++)
++        if (!memcmp(type, &dbg_curr_process->pointers_type[i], sizeof(*type)))
++        {
++            ret->module = 0;
++            ret->id = dbg_itype_pointers + i;
++            return TRUE;
++        }
++    if (dbg_itype_pointers + dbg_curr_process->num_pointers_type >= dbg_itype_first)
++    {
++        FIXME("overflow in pointer types\n");
++        return FALSE;
++    }
++    new = dbg_heap_realloc(dbg_curr_process->pointers_type, (dbg_curr_process->num_pointers_type + 1) * sizeof(*new));
++    if (!new) return FALSE;
++    dbg_curr_process->pointers_type = new;
++    dbg_curr_process->pointers_type[dbg_curr_process->num_pointers_type] = *type;
++    ret->module = 0;
++    ret->id = dbg_itype_pointers + dbg_curr_process->num_pointers_type;
++    dbg_curr_process->num_pointers_type++;
++
++    return TRUE;
+ }
+ 
+ /******************************************************************
+@@ -498,7 +504,7 @@ void print_value(const struct dbg_lvalue* lvalue, char format, int level)
+         types_get_info(&type, TI_GET_COUNT, &count);
+         types_get_info(&type, TI_GET_LENGTH, &size);
+         lvalue_field = *lvalue;
+-        types_get_info(&lvalue_field.type, TI_GET_TYPE, &lvalue_field.type.id);
++        types_get_type(&lvalue_field.type, &lvalue_field.type);
+         types_get_real_type(&lvalue_field.type, &tag);
+ 
+         if (size == count && tag == SymTagBaseType)
+@@ -536,7 +542,7 @@ void print_value(const struct dbg_lvalue* lvalue, char format, int level)
+         break;
+     case SymTagTypedef:
+         lvalue_field = *lvalue;
+-        types_get_info(&lvalue->type, TI_GET_TYPE, &lvalue_field.type.id);
++        types_get_type(&lvalue->type, &lvalue_field.type);
+         print_value(&lvalue_field, format, level);
+         break;
+     default:
+@@ -598,8 +604,7 @@ BOOL types_print_type(const struct dbg_type* type, BOOL details)
+         if (details) dbg_printf("Basic<%ls>", name); else dbg_printf("%ls", name);
+         break;
+     case SymTagPointerType:
+-        types_get_info(type, TI_GET_TYPE, &subtype.id);
+-        subtype.module = type->module;
++        types_get_type(type, &subtype);
+         types_print_type(&subtype, FALSE);
+         dbg_printf("*");
+         break;
+@@ -635,7 +640,7 @@ BOOL types_print_type(const struct dbg_type* type, BOOL details)
+                         if (!types_get_info(&type_elt, TI_GET_SYMNAME, &ptr) || !ptr) continue;
+                         dbg_printf("%ls", ptr);
+                         HeapFree(GetProcessHeap(), 0, ptr);
+-                        if (types_get_info(&type_elt, TI_GET_TYPE, &type_elt.id))
++                        if (types_get_type(&type_elt, &type_elt))
+                         {
+                             dbg_printf(":");
+                             types_print_type(&type_elt, details);
+@@ -650,8 +655,7 @@ BOOL types_print_type(const struct dbg_type* type, BOOL details)
+         }
+         break;
+     case SymTagArrayType:
+-        types_get_info(type, TI_GET_TYPE, &subtype.id);
+-        subtype.module = type->module;
++        types_get_type(type, &subtype);
+         types_print_type(&subtype, details);
+         if (types_get_info(type, TI_GET_COUNT, &count))
+             dbg_printf(" %ls[%d]", name, count);
+@@ -662,17 +666,12 @@ BOOL types_print_type(const struct dbg_type* type, BOOL details)
+         dbg_printf("enum %ls", name);
+         break;
+     case SymTagFunctionType:
+-        types_get_info(type, TI_GET_TYPE, &subtype.id);
+-        /* is the returned type the same object as function sig itself ? */
+-        if (subtype.id != type->id)
++        if (types_get_type(type, &subtype))
+         {
+-            subtype.module = type->module;
+-            types_print_type(&subtype, FALSE);
+-        }
+-        else
+-        {
+-            subtype.module = 0;
+-            dbg_printf("<ret_type=self>");
++            if (memcmp(type, &subtype, sizeof(subtype)))
++                types_print_type(&subtype, FALSE);
++            else
++                dbg_printf("<ret_type=self>");
+         }
+         dbg_printf(" (*%ls)(", name);
+         if (types_get_info(type, TI_GET_CHILDRENCOUNT, &count))
+@@ -691,7 +690,7 @@ BOOL types_print_type(const struct dbg_type* type, BOOL details)
+                     for (i = 0; i < min(fcp->Count, count); i++)
+                     {
+                         subtype.id = fcp->ChildId[i];
+-                        types_get_info(&subtype, TI_GET_TYPE, &subtype.id);
++                        types_get_type(&subtype, &subtype);
+                         types_print_type(&subtype, FALSE);
+                         if (i < min(fcp->Count, count) - 1 || count > 256) dbg_printf(", ");
+                     }
+@@ -717,6 +716,9 @@ BOOL types_print_type(const struct dbg_type* type, BOOL details)
+ /* helper to typecast pInfo to its expected type (_t) */
+ #define X(_t) (*((_t*)pInfo))
+ 
++/* wrapper to SymGetInfo, including also: support for internal types
++ * use types_get_type() rather than this function for TI_GET_TYPE request
++ */
+ BOOL types_get_info(const struct dbg_type* type, IMAGEHLP_SYMBOL_TYPE_INFO ti, void* pInfo)
+ {
+     if (type->id == dbg_itype_none) return FALSE;
+@@ -756,6 +758,20 @@ BOOL types_get_info(const struct dbg_type* type, IMAGEHLP_SYMBOL_TYPE_INFO ti, v
+         return ret;
+     }
+ 
++    if (type->id >= dbg_itype_pointers && type->id < dbg_itype_first)
++    {
++        unsigned i = type->id - dbg_itype_pointers;
++        if (i >= dbg_curr_process->num_pointers_type) return FALSE;
++        switch (ti)
++        {
++        case TI_GET_SYMTAG:  X(DWORD)   = SymTagPointerType; break;
++        case TI_GET_LENGTH:  X(DWORD64) = ADDRSIZE; break;
++        case TI_GET_TYPE: WINE_FIXME("Should use types_get_type() instead\n"); break;
++        default: WINE_FIXME("unsupported %u for pointer type %d\n", ti, i); return FALSE;
++        }
++        return TRUE;
++    }
++
+     assert(type->id >= dbg_itype_first);
+ 
+     switch (type->id)
+@@ -935,6 +935,23 @@ BOOL types_get_info(const struct dbg_type* type, IMAGEHLP_SYMBOL_TYPE_INFO ti, v
+ #undef X
+     return TRUE;
+ }
++/* one shouldn't call TI_GET_TYPE in symt_get_info() as cached pointer info won't be properly supported
++ * this function should be used instead
++ * (type and ret could point to the same structure)
++ */
++BOOL types_get_type(const struct dbg_type* type, struct dbg_type* ret)
++{
++    if (type->module == 0 && type->id >= dbg_itype_pointers && type->id < dbg_itype_first)
++    {
++        unsigned i = type->id - dbg_itype_pointers;
++        if (i >= dbg_curr_process->num_pointers_type) return FALSE;
++        *ret = dbg_curr_process->pointers_type[i];
++        return TRUE;
++    }
++    if (!types_get_info(type, TI_GET_TYPE, &ret->id)) return FALSE;
++    ret->module = type->module;
++    return TRUE;
++}
+ 
+ static BOOL types_compare_name(struct dbg_type type1, struct dbg_type type2, BOOL* equal)
+ {
+@@ -969,8 +1003,7 @@ static BOOL types_compare_children(struct dbg_type type1, struct dbg_type type2,
+                 if (ret && *equal)
+                 {
+                     /* compare type of member */
+-                    ret = types_get_info(&type1, TI_GET_TYPE, &type1.id) &&
+-                        types_get_info(&type2, TI_GET_TYPE, &type2.id);
++                    ret = types_get_type(&type1, &type1) && types_get_type(&type2, &type2);
+                     if (ret) ret = types_compare(type1, type2, equal);
+                     /* FIXME should compare bitfield info when present */
+                 }
+@@ -1058,8 +1091,8 @@ BOOL types_compare(struct dbg_type type1, struct dbg_type type2, BOOL* equal)
+             dbg_printf("Unsupported yet tag %d\n", tag1);
+             return FALSE;
+         }
+-    } while (types_get_info(&type1, TI_GET_TYPE, &type1.id) &&
+-             types_get_info(&type2, TI_GET_TYPE, &type2.id));
++    } while (types_get_type(&type1, &type1) &&
++             types_get_type(&type2, &type2));
+     return FALSE;
+ }
+ 
+diff --git a/programs/winedbg/winedbg.c b/programs/winedbg/winedbg.c
+index dab5fbd85a3..a152ea8a2c8 100644
+--- a/programs/winedbg/winedbg.c
++++ b/programs/winedbg/winedbg.c
+@@ -313,6 +313,8 @@ struct dbg_process*	dbg_add_process(const struct be_process_io* pio, DWORD pid,
+     p->source_current_file[0] = '\0';
+     p->source_start_line = -1;
+     p->source_end_line = -1;
++    p->pointers_type = NULL;
++    p->num_pointers_type = 0;
+ 
+     list_add_head(&dbg_process_list, &p->entry);
+ 
+@@ -362,6 +364,7 @@ void dbg_del_process(struct dbg_process* p)
+     if (p == dbg_curr_process) dbg_curr_process = NULL;
+     if (p->event_on_first_exception) CloseHandle(p->event_on_first_exception);
+     HeapFree(GetProcessHeap(), 0, (char*)p->imageName);
++    HeapFree(GetProcessHeap(), 0, p->pointers_type);
+     HeapFree(GetProcessHeap(), 0, p);
+ }
+ 
+

@@ -1,0 +1,88 @@
+From: Eric Pouech <eric.pouech@gmail.com>
+Subject: [PATCH 17/19] programs/winedbg: added 'print type <TYPE>' command
+Message-Id: <163897112079.528091.10076054846792410928.stgit@euterpe>
+Date: Wed,  8 Dec 2021 14:45:20 +0100
+In-Reply-To: <163897087724.528091.10090935688970751662.stgit@euterpe>
+References: <163897087724.528091.10090935688970751662.stgit@euterpe>
+
+Signed-off-by: Eric Pouech <eric.pouech@gmail.com>
+
+---
+ programs/winedbg/dbg.y   |    1 +
+ programs/winedbg/types.c |   25 ++++++++++++++++++-------
+ 2 files changed, 19 insertions(+), 7 deletions(-)
+
+diff --git a/programs/winedbg/dbg.y b/programs/winedbg/dbg.y
+index 3fc5a87c0b5..b10f50a3d6a 100644
+--- a/programs/winedbg/dbg.y
++++ b/programs/winedbg/dbg.y
+@@ -222,6 +222,7 @@ x_command:
+ print_command:
+       tPRINT expr_lvalue         { print_value(&$2, 0, 0); }
+     | tPRINT tFORMAT expr_lvalue { if (($2 >> 8) == 1) print_value(&$3, $2 & 0xff, 0); else dbg_printf("Count is meaningless in print command\n"); }
++    | tPRINT type_expr           { types_print_type(&$2, TRUE); dbg_printf("\n"); }
+     ;
+ 
+ break_command:
+diff --git a/programs/winedbg/types.c b/programs/winedbg/types.c
+index af0fd8806c6..70fcada494e 100644
+--- a/programs/winedbg/types.c
++++ b/programs/winedbg/types.c
+@@ -594,7 +594,8 @@ BOOL types_print_type(const struct dbg_type* type, BOOL details)
+ {
+     WCHAR*              ptr;
+     const WCHAR*        name;
+-    DWORD               tag, udt, count;
++    DWORD               tag, udt, count, bitoffset;
++    DWORD64             bitlen;
+     struct dbg_type     subtype;
+ 
+     if (type->id == dbg_itype_none || !types_get_info(type, TI_GET_SYMTAG, &tag))
+@@ -608,7 +609,7 @@ BOOL types_print_type(const struct dbg_type* type, BOOL details)
+     switch (tag)
+     {
+     case SymTagBaseType:
+-        if (details) dbg_printf("Basic<%ls>", name); else dbg_printf("%ls", name);
++        dbg_printf("%ls", name);
+         break;
+     case SymTagPointerType:
+         types_get_type(type, &subtype);
+@@ -645,14 +646,19 @@ BOOL types_print_type(const struct dbg_type* type, BOOL details)
+                         type_elt.module = type->module;
+                         type_elt.id = fcp->ChildId[i];
+                         if (!types_get_info(&type_elt, TI_GET_SYMNAME, &ptr) || !ptr) continue;
+-                        dbg_printf("%ls", ptr);
+-                        HeapFree(GetProcessHeap(), 0, ptr);
++                        if (!types_get_info(&type_elt, TI_GET_BITPOSITION, &bitoffset) ||
++                            !types_get_info(&type_elt, TI_GET_LENGTH, &bitlen))
++                            bitlen = ~(DWORD64)0;
+                         if (types_get_type(&type_elt, &type_elt))
+                         {
+-                            dbg_printf(":");
+                             types_print_type(&type_elt, details);
+                         }
+-                        if (i < min(fcp->Count, count) - 1 || count > 256) dbg_printf(", ");
++                        dbg_printf(" %ls", ptr);
++                        HeapFree(GetProcessHeap(), 0, ptr);
++                        if (bitlen != ~(DWORD64)0)
++                            dbg_printf(" : %I64u", bitlen);
++                        dbg_printf(";");
++                        if (i < min(fcp->Count, count) - 1 || count > 256) dbg_printf(" ");
+                     }
+                 }
+                 count -= min(count, 256);
+@@ -709,7 +715,12 @@ BOOL types_print_type(const struct dbg_type* type, BOOL details)
+         dbg_printf(")");
+         break;
+     case SymTagTypedef:
+-        dbg_printf("%ls", name);
++        if (details && types_get_type(type, &subtype))
++        {
++            dbg_printf("typedef %ls => ", name);
++            types_print_type(&subtype, FALSE);
++        }
++        else dbg_printf("%ls", name);
+         break;
+     default:
+         WINE_ERR("Unknown type %u for %ls\n", tag, name);
+

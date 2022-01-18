@@ -1,0 +1,32 @@
+From: Zhiyi Zhang <zzhang@codeweavers.com>
+Subject: [PATCH] winex11.drv: Print an error when the X server is not running in a 32-bit display mode.
+Message-Id: <f01b2d0c-717c-f292-6d55-3c8d4d394726@codeweavers.com>
+Date: Fri, 24 Dec 2021 15:17:05 +0800
+
+Some games expect a 32-bit display mode to be present even though EnumDisplaySettings() doesn't
+report it. It's usually a configuration issue if the X server is not running in a 32-bit display
+mode.
+
+Wine-Bug: https://bugs.winehq.org/show_bug.cgi?id=52258
+Signed-off-by: Zhiyi Zhang <zzhang@codeweavers.com>
+---
+ dlls/winex11.drv/x11drv_main.c | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/dlls/winex11.drv/x11drv_main.c b/dlls/winex11.drv/x11drv_main.c
+index 32beb84a009..e31f0a42113 100644
+--- a/dlls/winex11.drv/x11drv_main.c
++++ b/dlls/winex11.drv/x11drv_main.c
+@@ -599,6 +599,8 @@ static BOOL process_attach(void)
+     init_pixmap_formats( display );
+     init_visuals( display, DefaultScreen( display ));
+     screen_bpp = pixmap_formats[default_visual.depth]->bits_per_pixel;
++    if (screen_bpp != 32)
++        ERR("The X server is running in a %u-bit display mode. Expect problems.", screen_bpp);
+ 
+     XInternAtoms( display, (char **)atom_names, NB_XATOMS - FIRST_XATOM, False, X11DRV_Atoms );
+ 
+
+-- 
+2.32.0
+

@@ -1,0 +1,27 @@
+From ec2f6731252dfe2df86e703414a77bcf07e9abdc Mon Sep 17 00:00:00 2001
+From: Jinoh Kang <jinoh.kang.kr@gmail.com>
+Date: Sat, 1 Jan 2022 05:34:54 +0900
+Subject: [PATCH 08/13] loader: Fix return type of get_auxiliary().
+To: wine-devel@winehq.org
+
+Signed-off-by: Jinoh Kang <jinoh.kang.kr@gmail.com>
+---
+ loader/preloader.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/loader/preloader.c b/loader/preloader.c
+index 6a3ac41ad7c..eefbcff3469 100644
+--- a/loader/preloader.c
++++ b/loader/preloader.c
+@@ -1069,7 +1069,7 @@ static void set_auxiliary_values( struct preloader_state *state,
+  *
+  * Get a field of the auxiliary structure
+  */
+-static int get_auxiliary( struct wld_auxv *av, int type, int def_val )
++static ElfW(Addr) get_auxiliary( struct wld_auxv *av, int type, ElfW(Addr) def_val )
+ {
+   for ( ; av->a_type != AT_NULL; av++)
+       if( av->a_type == type ) return av->a_un.a_val;
+-- 
+2.31.1
+

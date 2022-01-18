@@ -1,0 +1,40 @@
+From: Brendan Shanks <bshanks@codeweavers.com>
+Subject: [PATCH v2 1/2] kernelbase: Use +threadname channel for SetThreadDescription().
+Message-Id: <20211207171949.36351-2-bshanks@codeweavers.com>
+Date: Tue,  7 Dec 2021 09:19:49 -0800
+In-Reply-To: <20211207171949.36351-1-bshanks@codeweavers.com>
+References: <20211207171949.36351-1-bshanks@codeweavers.com>
+
+Signed-off-by: Brendan Shanks <bshanks@codeweavers.com>
+---
+ dlls/kernelbase/thread.c | 6 +++++-
+ 1 file changed, 5 insertions(+), 1 deletion(-)
+
+diff --git a/dlls/kernelbase/thread.c b/dlls/kernelbase/thread.c
+index e9c12d85771..64bf947729f 100644
+--- a/dlls/kernelbase/thread.c
++++ b/dlls/kernelbase/thread.c
+@@ -37,6 +37,7 @@
+ #include "wine/heap.h"
+ 
+ WINE_DEFAULT_DEBUG_CHANNEL(thread);
++WINE_DECLARE_DEBUG_CHANNEL(threadname);
+ 
+ 
+ /***********************************************************************
+@@ -420,7 +421,10 @@ HRESULT WINAPI DECLSPEC_HOTPATCH SetThreadDescription( HANDLE thread, PCWSTR des
+     THREAD_NAME_INFORMATION info;
+     int length;
+ 
+-    TRACE( "(%p, %s)\n", thread, debugstr_w( description ));
++    if (thread == GetCurrentThread())
++        WARN_(threadname)( "Thread renamed to %s\n", debugstr_w( description ));
++    else
++        WARN_(threadname)( "Thread handle %p renamed to %s\n", thread, debugstr_w( description ));
+ 
+     length = description ? lstrlenW( description ) * sizeof(WCHAR) : 0;
+ 
+
+-- 
+2.30.1 (Apple Git-130)
+

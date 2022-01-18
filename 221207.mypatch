@@ -1,0 +1,516 @@
+From: Jactry Zeng <jzeng@codeweavers.com>
+Subject: [PATCH 3/3] comsvcs: Implement ISharedPropertyGroupManager_CreatePropertyGroup().
+Message-Id: <20211202083847.99010-3-jzeng@codeweavers.com>
+Date: Thu,  2 Dec 2021 02:38:47 -0600
+In-Reply-To: <20211202083847.99010-1-jzeng@codeweavers.com>
+References: <20211202083847.99010-1-jzeng@codeweavers.com>
+
+Signed-off-by: Jactry Zeng <jzeng@codeweavers.com>
+---
+ dlls/comsvcs/comsvcs_private.h |   2 +
+ dlls/comsvcs/property.c        | 256 ++++++++++++++++++++++++++++++++-
+ dlls/comsvcs/tests/property.c  | 129 +++++++++++++++++
+ include/comsvcs.idl            |  12 ++
+ 4 files changed, 397 insertions(+), 2 deletions(-)
+
+diff --git a/dlls/comsvcs/comsvcs_private.h b/dlls/comsvcs/comsvcs_private.h
+index 0051fb95831..f969f9b3943 100644
+--- a/dlls/comsvcs/comsvcs_private.h
++++ b/dlls/comsvcs/comsvcs_private.h
+@@ -35,6 +35,7 @@ enum tid_t
+ {
+     NULL_tid,
+     ISharedPropertyGroupManager_tid,
++    ISharedPropertyGroup_tid,
+     LAST_tid
+ };
+ 
+@@ -42,6 +43,7 @@ static REFIID tid_ids[] =
+ {
+     &IID_NULL,
+     &IID_ISharedPropertyGroupManager,
++    &IID_ISharedPropertyGroup,
+ };
+ 
+ HRESULT get_typeinfo(enum tid_t tid, ITypeInfo **typeinfo);
+diff --git a/dlls/comsvcs/property.c b/dlls/comsvcs/property.c
+index 382089f87b2..0c0b3a04083 100644
+--- a/dlls/comsvcs/property.c
++++ b/dlls/comsvcs/property.c
+@@ -17,6 +17,7 @@
+  */
+ 
+ #include "comsvcs_private.h"
++#include "wine/list.h"
+ #include "wine/debug.h"
+ 
+ WINE_DEFAULT_DEBUG_CHANNEL(comsvcs);
+@@ -25,6 +26,18 @@ struct group_manager
+ {
+     ISharedPropertyGroupManager ISharedPropertyGroupManager_iface;
+     LONG refcount;
++    struct list property_groups;
++    CRITICAL_SECTION cs;
++};
++
++struct property_group
++{
++    ISharedPropertyGroup ISharedPropertyGroup_iface;
++    LONG refcount;
++    struct group_manager *parent;
++    LONG isolation, release;
++    struct list entry;
++    BSTR name;
+ };
+ 
+ static struct group_manager *group_manager = NULL;
+@@ -34,6 +47,169 @@ static inline struct group_manager *impl_from_ISharedPropertyGroupManager(IShare
+     return CONTAINING_RECORD(iface, struct group_manager, ISharedPropertyGroupManager_iface);
+ }
+ 
++static inline struct property_group *impl_from_ISharedPropertyGroup(ISharedPropertyGroup *iface)
++{
++    return CONTAINING_RECORD(iface, struct property_group, ISharedPropertyGroup_iface);
++}
++
++static HRESULT WINAPI property_group_QueryInterface(ISharedPropertyGroup *iface, REFIID riid, void **out)
++{
++    struct property_group *group = impl_from_ISharedPropertyGroup(iface);
++
++    TRACE("iface %p, riid %s, out %p.\n", iface, debugstr_guid(riid), out);
++
++    if (IsEqualGUID(riid, &IID_IUnknown)
++            || IsEqualGUID(riid, &IID_IDispatch)
++            || IsEqualGUID(riid, &IID_ISharedPropertyGroup))
++    {
++        *out = &group->ISharedPropertyGroup_iface;
++        IUnknown_AddRef((IUnknown *)*out);
++        return S_OK;
++    }
++
++    WARN("%s not implemented.\n", debugstr_guid(riid));
++    *out = NULL;
++    return E_NOINTERFACE;
++}
++
++static ULONG WINAPI property_group_AddRef(ISharedPropertyGroup *iface)
++{
++    struct property_group *group = impl_from_ISharedPropertyGroup(iface);
++    ULONG refcount = InterlockedIncrement(&group->refcount);
++
++    TRACE("%p increasing refcount to %u.\n", iface, refcount);
++
++    return refcount;
++}
++
++static ULONG WINAPI property_group_Release(ISharedPropertyGroup *iface)
++{
++    struct property_group *group = impl_from_ISharedPropertyGroup(iface);
++    ULONG refcount = InterlockedDecrement(&group->refcount);
++
++    TRACE("%p decreasing refcount to %u.\n", iface, refcount);
++
++    if (!refcount)
++    {
++        struct group_manager *manager = group->parent;
++
++        SysFreeString(group->name);
++
++        EnterCriticalSection(&manager->cs);
++        list_remove(&group->entry);
++        LeaveCriticalSection(&manager->cs);
++
++        ISharedPropertyGroupManager_Release(&manager->ISharedPropertyGroupManager_iface);
++        free(group);
++    }
++
++    return refcount;
++}
++
++static HRESULT WINAPI property_group_GetTypeInfoCount(ISharedPropertyGroup *iface, UINT *info)
++{
++    TRACE("iface %p, info %p.\n", iface, info);
++
++    if (!info)
++        return E_INVALIDARG;
++
++    *info = 1;
++    return S_OK;
++}
++
++static HRESULT WINAPI property_group_GetTypeInfo(ISharedPropertyGroup *iface, UINT index,
++        LCID lcid, ITypeInfo **info)
++{
++    TRACE("iface %p, index %u, lcid %u, info %p.\n", iface, index, lcid, info);
++
++    if (index)
++        return DISP_E_BADINDEX;
++
++    return get_typeinfo(ISharedPropertyGroup_tid, info);
++}
++
++static HRESULT WINAPI property_group_GetIDsOfNames(ISharedPropertyGroup *iface, REFIID riid, LPOLESTR *names,
++        UINT count, LCID lcid, DISPID *dispid)
++{
++    ITypeInfo *typeinfo;
++    HRESULT hr;
++
++    TRACE("iface %p, riid %s, names %p, count %u, lcid %u, dispid %p.\n",
++            iface, debugstr_guid(riid), names, count, lcid, dispid);
++
++    hr = get_typeinfo(ISharedPropertyGroup_tid, &typeinfo);
++    if (SUCCEEDED(hr))
++    {
++        hr = ITypeInfo_GetIDsOfNames(typeinfo, names, count, dispid);
++        ITypeInfo_Release(typeinfo);
++    }
++
++    return hr;
++}
++
++static HRESULT WINAPI property_group_Invoke(ISharedPropertyGroup *iface, DISPID member, REFIID riid,
++        LCID lcid, WORD flags, DISPPARAMS *params, VARIANT *result, EXCEPINFO *except, UINT *argerr)
++{
++    ITypeInfo *typeinfo;
++    HRESULT hr;
++
++    TRACE("iface %p, member %u, riid %s, lcid %u, flags %x, params %p, result %p, except %p, argerr %p.\n",
++            iface, member, debugstr_guid(riid), lcid, flags, params, result, except, argerr);
++
++    hr = get_typeinfo(ISharedPropertyGroup_tid, &typeinfo);
++    if (SUCCEEDED(hr))
++    {
++        hr = ITypeInfo_Invoke(typeinfo, iface, member, flags, params, result, except, argerr);
++        ITypeInfo_Release(typeinfo);
++    }
++
++    return hr;
++}
++
++static HRESULT WINAPI property_group_CreatePropertyByPosition(ISharedPropertyGroup *iface, int index,
++        VARIANT_BOOL *exists, ISharedProperty **property)
++{
++    FIXME("iface %p, index %d, exisits %p, property %p: stub.\n",
++            iface, index, exists, property);
++    return E_NOTIMPL;
++}
++
++static HRESULT WINAPI property_group_get_PropertyByPosition(ISharedPropertyGroup *iface,
++        int index, ISharedProperty **property)
++{
++    FIXME("iface %p, index %d, property %p: stub.\n", iface, index, property);
++    return E_NOTIMPL;
++}
++
++static HRESULT WINAPI property_group_CreateProperty(ISharedPropertyGroup *iface,
++        BSTR name, VARIANT_BOOL *exists, ISharedProperty **property)
++{
++    FIXME("iface %p, name %s, exists %p, property %p: stub.\n", iface, debugstr_w(name), exists, property);
++    return E_NOTIMPL;
++}
++
++static HRESULT WINAPI property_group_get_Property(ISharedPropertyGroup *iface,
++        BSTR name, ISharedProperty **property)
++{
++    FIXME("iface %p, name %s, property %p: stub.\n", iface, debugstr_w(name), property);
++    return E_NOTIMPL;
++}
++
++static const ISharedPropertyGroupVtbl property_group_vtbl =
++{
++    property_group_QueryInterface,
++    property_group_AddRef,
++    property_group_Release,
++    property_group_GetTypeInfoCount,
++    property_group_GetTypeInfo,
++    property_group_GetIDsOfNames,
++    property_group_Invoke,
++    property_group_CreatePropertyByPosition,
++    property_group_get_PropertyByPosition,
++    property_group_CreateProperty,
++    property_group_get_Property,
++};
++
+ static HRESULT WINAPI group_manager_QueryInterface(ISharedPropertyGroupManager *iface, REFIID riid, void **out)
+ {
+     struct group_manager *manager = impl_from_ISharedPropertyGroupManager(iface);
+@@ -134,12 +310,85 @@ static HRESULT WINAPI group_manager_Invoke(ISharedPropertyGroupManager *iface, D
+     return hr;
+ }
+ 
++static struct property_group *find_propery_group(struct group_manager *manager, BSTR name)
++{
++    struct property_group *group;
++
++    LIST_FOR_EACH_ENTRY(group, &group_manager->property_groups, struct property_group, entry)
++    {
++        if (!lstrcmpW(group->name, name))
++            return group;
++    }
++    return NULL;
++}
++
++struct property_group *create_property_group(struct group_manager* manager, BSTR name, LONG *isolation,
++        LONG *release, VARIANT_BOOL *exists)
++{
++    struct property_group *property_group;
++
++    property_group = find_propery_group(manager, name);
++    if (property_group)
++    {
++        *exists = VARIANT_TRUE;
++        *isolation = property_group->isolation;
++        *release = property_group->release;
++        ISharedPropertyGroup_AddRef(&property_group->ISharedPropertyGroup_iface);
++    }
++    else
++    {
++        property_group = malloc(sizeof(*property_group));
++        if (!property_group)
++            return NULL;
++
++        property_group->ISharedPropertyGroup_iface.lpVtbl = &property_group_vtbl;
++        property_group->parent = manager;
++        property_group->isolation = *isolation;
++        property_group->release = *release;
++        property_group->refcount = (*release == Process) ? 2 : 1;
++        property_group->name = SysAllocString(name);
++        if (!property_group->name)
++        {
++            free(property_group);
++            return NULL;
++        }
++        list_add_tail(&manager->property_groups, &property_group->entry);
++
++        *exists = VARIANT_FALSE;
++        ISharedPropertyGroupManager_AddRef(&property_group->parent->ISharedPropertyGroupManager_iface);
++    }
++    return property_group;
++}
++
+ static HRESULT WINAPI group_manager_CreatePropertyGroup(ISharedPropertyGroupManager *iface, BSTR name,
+         LONG *isolation, LONG *release, VARIANT_BOOL *exists, ISharedPropertyGroup **group)
+ {
+-    FIXME("iface %p, name %s, isolation %p, release %p, exists %p, group %p: stub.\n",
++    struct group_manager *manager = impl_from_ISharedPropertyGroupManager(iface);
++    struct property_group *property_group;
++
++    TRACE("iface %p, name %s, isolation %p, release %p, exists %p, group %p.\n",
+             iface, debugstr_w(name), isolation, release, exists, group);
+-    return E_NOTIMPL;
++
++    if (!name)
++        return E_POINTER;
++
++    if (*isolation > LockMethod || *release > Process)
++        return E_INVALIDARG;
++
++    *group = NULL;
++    if (*isolation == LockMethod && *release == Standard)
++        return CONTEXT_E_NOCONTEXT;
++
++    EnterCriticalSection(&manager->cs);
++    property_group = create_property_group(manager, name, isolation, release, exists);
++    LeaveCriticalSection(&manager->cs);
++
++    if (!property_group)
++        return E_OUTOFMEMORY;
++
++    *group = &property_group->ISharedPropertyGroup_iface;
++
++    return S_OK;
+ }
+ 
+ static HRESULT WINAPI group_manager_get_Group(ISharedPropertyGroupManager *iface, BSTR name,
+@@ -186,9 +435,12 @@ HRESULT WINAPI group_manager_create(IClassFactory *iface, IUnknown *outer, REFII
+         }
+         manager->ISharedPropertyGroupManager_iface.lpVtbl = &group_manager_vtbl;
+         manager->refcount = 1;
++        list_init(&manager->property_groups);
++        InitializeCriticalSection(&manager->cs);
+ 
+         if (InterlockedCompareExchangePointer((void **)&group_manager, manager, NULL))
+         {
++            DeleteCriticalSection(&manager->cs);
+             free(manager);
+         }
+     }
+diff --git a/dlls/comsvcs/tests/property.c b/dlls/comsvcs/tests/property.c
+index 53dcfae8c8e..a8b3a7424fe 100644
+--- a/dlls/comsvcs/tests/property.c
++++ b/dlls/comsvcs/tests/property.c
+@@ -26,6 +26,15 @@
+ 
+ #include "wine/test.h"
+ 
++#define EXPECT_REF(obj,ref) _expect_ref((IUnknown*)obj, ref, __LINE__)
++static void _expect_ref(IUnknown *obj, ULONG ref, int line)
++{
++    ULONG count;
++    IUnknown_AddRef(obj);
++    count = IUnknown_Release(obj);
++    ok_(__FILE__,line)(count == ref, "Unexpected refcount %d, expected %d.\n", count, ref);
++}
++
+ static ULONG get_refcount(void *iface)
+ {
+     IUnknown *unknown = iface;
+@@ -166,11 +175,131 @@ static void test_interfaces(void)
+     ISharedPropertyGroupManager_Release(manager);
+ }
+ 
++static void test_property_group(void)
++{
++    ISharedPropertyGroup *group, *group1;
++    ISharedPropertyGroupManager *manager;
++    ULONG expected_refcount;
++    LONG isolation, release;
++    VARIANT_BOOL exists;
++    IDispatch *dispatch;
++    HRESULT hr;
++    BSTR name;
++    static const struct test_name_id test_name_ids[] =
++    {
++        {L"CreatePropertyByPosition", 0x1},
++        {L"PropertyByPosition", 0x2},
++        {L"CreateProperty", 0x3},
++        {L"Property", 0x4},
++    };
++
++    hr = CoCreateInstance(&CLSID_SharedPropertyGroupManager, NULL, CLSCTX_INPROC_SERVER,
++            &IID_ISharedPropertyGroupManager, (void **)&manager);
++    ok(hr == S_OK, "Got hr %#x.\n", hr);
++
++    group = (void *)0xdeadbeef;
++    hr = ISharedPropertyGroupManager_CreatePropertyGroup(manager, NULL, &isolation, &release, &exists, &group);
++    ok(hr == E_POINTER, "Got hr %#x.\n", hr);
++    ok(group == (void *)0xdeadbeef, "Got unexpected pointer: %p.\n", group);
++
++    name = SysAllocString(L"testgroupname");
++    isolation = 2;
++    release = Standard;
++    hr = ISharedPropertyGroupManager_CreatePropertyGroup(manager, name, &isolation, &release, &exists, &group);
++    ok(hr == E_INVALIDARG, "Got hr %#x.\n", hr);
++    ok(group == (void *)0xdeadbeef, "Got unexpected pointer: %p.\n", group);
++
++    /* Crash on Windows */
++    if (0)
++    {
++        ISharedPropertyGroupManager_CreatePropertyGroup(manager, name, NULL, &release, &exists, &group);
++        ISharedPropertyGroupManager_CreatePropertyGroup(manager, name, &isolation, NULL, &exists, &group);
++        ISharedPropertyGroupManager_CreatePropertyGroup(manager, name, &isolation, &release, NULL, &group);
++    }
++
++    isolation = LockSetGet;
++    release = 2;
++    hr = ISharedPropertyGroupManager_CreatePropertyGroup(manager, name, &isolation, &release, &exists, &group);
++    ok(hr == E_INVALIDARG, "Got hr %#x.\n", hr);
++    ok(group == (void *)0xdeadbeef, "Got unexpected pointer: %p.\n", group);
++
++    isolation = LockMethod;
++    release = Standard;
++    hr = ISharedPropertyGroupManager_CreatePropertyGroup(manager, name, &isolation, &release, &exists, &group);
++    ok(hr == CONTEXT_E_NOCONTEXT, "Got hr %#x.\n", hr);
++    ok(!group, "Got unexpected pointer: %p.\n", group);
++
++    isolation = LockSetGet;
++    release = Standard;
++    exists = VARIANT_TRUE;
++    expected_refcount = get_refcount(manager) + 1;
++    hr = ISharedPropertyGroupManager_CreatePropertyGroup(manager, name, &isolation, &release, &exists, &group);
++    ok(hr == S_OK, "Got hr %#x.\n", hr);
++    ok(!exists, "Got unexpected value %d.\n", exists);
++    EXPECT_REF(group, 1);
++
++    EXPECT_REF(manager, expected_refcount);
++    ISharedPropertyGroup_AddRef(group);
++    EXPECT_REF(manager, expected_refcount);
++    ISharedPropertyGroup_Release(group);
++    EXPECT_REF(manager, expected_refcount);
++
++    /* Create an existing group. */
++    isolation = LockMethod;
++    release = Process;
++    expected_refcount = get_refcount(manager);
++    hr = ISharedPropertyGroupManager_CreatePropertyGroup(manager, name, &isolation, &release, &exists, &group1);
++    ok(hr == S_OK, "Got hr %#x.\n", hr);
++    ok(!!exists, "Got unexpected value %d.\n", exists);
++    ok(isolation == LockSetGet, "Got unexpected value %d.\n", isolation);
++    ok(release == Standard, "Got unexpected value %d.\n", release);
++    ok(group == group1, "Got unexpected pointer: %p.\n", group1);
++    EXPECT_REF(group, 2);
++    EXPECT_REF(manager, expected_refcount);
++    ISharedPropertyGroup_Release(group1);
++    EXPECT_REF(group, 1);
++    SysFreeString(name);
++
++    /* Process release mode. */
++    name = SysAllocString(L"testgroupname2");
++    isolation = LockSetGet;
++    release = Process;
++    exists = VARIANT_TRUE;
++    expected_refcount = get_refcount(manager) + 1;
++    hr = ISharedPropertyGroupManager_CreatePropertyGroup(manager, name, &isolation, &release, &exists, &group1);
++    ok(hr == S_OK, "Got hr %#x.\n", hr);
++    ok(isolation == LockSetGet, "Got unexpected value %d.\n", isolation);
++    ok(release == Process, "Got unexpected value %d.\n", release);
++    ok(!exists, "Got unexpected value %d.\n", exists);
++    EXPECT_REF(manager, expected_refcount);
++    EXPECT_REF(group1, 2);
++    SysFreeString(name);
++
++    expected_refcount = get_refcount(manager);
++    ISharedPropertyGroup_Release(group1);
++    EXPECT_REF(manager, expected_refcount);
++    expected_refcount = get_refcount(manager) - 1;
++    ISharedPropertyGroup_Release(group1);
++    EXPECT_REF(manager, expected_refcount);
++
++    hr = ISharedPropertyGroup_QueryInterface(group, &IID_IDispatch, (void **)&dispatch);
++    ok(hr == S_OK, "Got hr %#x.\n", hr);
++    TEST_TYPEINFO(dispatch, test_name_ids, ARRAY_SIZE(test_name_ids), &IID_ISharedPropertyGroup);
++    IDispatch_Release(dispatch);
++
++    expected_refcount = get_refcount(manager) - 1;
++    ISharedPropertyGroup_Release(group);
++    EXPECT_REF(manager, expected_refcount);
++
++    ISharedPropertyGroupManager_Release(manager);
++}
++
+ START_TEST(property)
+ {
+     CoInitialize(NULL);
+ 
+     test_interfaces();
++    test_property_group();
+ 
+     CoUninitialize();
+ }
+diff --git a/include/comsvcs.idl b/include/comsvcs.idl
+index 902c78b05c8..8e64c2db73e 100644
+--- a/include/comsvcs.idl
++++ b/include/comsvcs.idl
+@@ -31,6 +31,18 @@ typedef LPOLESTR  SRESID;
+ typedef long      TIMEINSECS;
+ typedef DWORD_PTR TRANSID;
+ 
++typedef enum _LockModes
++{
++    LockSetGet = 0,
++    LockMethod = 1,
++} LockModes;
++
++typedef enum _ReleaseModes
++{
++    Standard = 0,
++    Process  = 1,
++} ReleaseModes;
++
+ [
+     uuid(2a005c00-a5de-11cf-9e66-00aa00a3f464),
+     version(1.0)
+
+-- 
+2.33.0
+

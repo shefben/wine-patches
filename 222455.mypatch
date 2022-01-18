@@ -1,0 +1,36 @@
+From: Gerald Pfeifer <gerald@pfeifer.com>
+Subject: [PATCH] winebus.sys: Declare a variable only when used
+Message-Id: <20211220224133.2678233EF8@hamza.pair.com>
+Date: Mon, 20 Dec 2021 23:41:38 +0100 (CET)
+
+One step towards a world with fewer warnings (GCC 12).
+
+--
+
+udev_add_device declares a variable (product) even when it is not
+used on all platforms. Use the same condition for the declaration
+as for the code.
+
+Signed-off-by: Gerald Pfeifer <gerald@pfeifer.com>
+---
+ dlls/winebus.sys/bus_udev.c | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/dlls/winebus.sys/bus_udev.c b/dlls/winebus.sys/bus_udev.c
+index 2269f5b904e..d3e060bf631 100644
+--- a/dlls/winebus.sys/bus_udev.c
++++ b/dlls/winebus.sys/bus_udev.c
+@@ -1245,7 +1245,9 @@ static void udev_add_device(struct udev_device *dev, int fd)
+     if (!strcmp(subsystem, "hidraw"))
+     {
+         static const WCHAR hidraw[] = {'h','i','d','r','a','w',0};
++#ifdef HAVE_LINUX_HIDRAW_H
+         char product[MAX_PATH];
++#endif
+ 
+         if (!desc.manufacturer[0]) memcpy(desc.manufacturer, hidraw, sizeof(hidraw));
+ 
+
+-- 
+2.32.0
+

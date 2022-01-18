@@ -1,0 +1,616 @@
+From: "Bernhard Übelacker" <bernhardu@mailbox.org>
+Subject: [PATCH v3] msado15: Some interface parts need a 64-bit type on amd64.
+Message-Id: <20211223223759.300972-1-bernhardu@mailbox.org>
+Date: Thu, 23 Dec 2021 23:37:59 +0100
+
+Wine-Bug: https://bugs.winehq.org/show_bug.cgi?id=50842
+Signed-off-by: Bernhard Übelacker <bernhardu@mailbox.org>
+---
+Supersedes 222557.
+
+v3: Dropped the _WIN64 patch for widl and fixed definition of ADO_LONGPTR.
+    Fixed a few resulting format string warnings.
+    But the "warning: can't write value of type 20 yet" remains.
+
+v2: Missed some warnings about incompatible types.
+---
+ dlls/msado15/command.c         |  4 +--
+ dlls/msado15/connection.c      |  9 ++++++-
+ dlls/msado15/recordset.c       | 42 +++++++++++++++----------------
+ dlls/msado15/stream.c          | 12 ++++-----
+ dlls/msado15/tests/msado15.c   | 45 +++++++++++++++++----------------
+ include/msado15_backcompat.idl | 46 +++++++++++++++++++---------------
+ 6 files changed, 87 insertions(+), 71 deletions(-)
+
+diff --git a/dlls/msado15/command.c b/dlls/msado15/command.c
+index 8c8ec79a58e..63ec9b23a01 100644
+--- a/dlls/msado15/command.c
++++ b/dlls/msado15/command.c
+@@ -234,10 +234,10 @@ static HRESULT WINAPI command_Execute( _Command *iface, VARIANT *affected, VARIA
+ }
+ 
+ static HRESULT WINAPI command_CreateParameter( _Command *iface, BSTR name, DataTypeEnum type,
+-                                               ParameterDirectionEnum direction, LONG size, VARIANT value,
++                                               ParameterDirectionEnum direction, ADO_LONGPTR size, VARIANT value,
+                                                _Parameter **parameter )
+ {
+-    FIXME( "%p, %s, %d, %d, %d, %p\n", iface, debugstr_w(name), type, direction, size, parameter );
++    FIXME( "%p, %s, %d, %d, %ld, %p\n", iface, debugstr_w(name), type, direction, size, parameter );
+     return E_NOTIMPL;
+ }
+ 
+diff --git a/dlls/msado15/connection.c b/dlls/msado15/connection.c
+index ce7750fef66..1dfae0b7821 100644
+--- a/dlls/msado15/connection.c
++++ b/dlls/msado15/connection.c
+@@ -336,8 +336,15 @@ static HRESULT WINAPI connection_Execute( _Connection *iface, BSTR command, VARI
+ 
+     if (records_affected)
+     {
++        ADO_LONGPTR records_affected_lp;
++        _Recordset_get_RecordCount(recordset, &records_affected_lp);
++#ifdef _WIN64
++        V_VT(records_affected) = VT_I8;
++        V_I8(records_affected) = records_affected_lp;
++#else
+         V_VT(records_affected) = VT_I4;
+-        _Recordset_get_RecordCount(recordset, &V_I4(records_affected));
++        V_I4(records_affected) = records_affected_lp;
++#endif
+     }
+ 
+     *record_set = recordset;
+diff --git a/dlls/msado15/recordset.c b/dlls/msado15/recordset.c
+index 92a0deb6959..81098a31144 100644
+--- a/dlls/msado15/recordset.c
++++ b/dlls/msado15/recordset.c
+@@ -69,7 +69,7 @@ struct field
+     LONG                refs;
+     WCHAR              *name;
+     DataTypeEnum        type;
+-    LONG                defined_size;
++    ADO_LONGPTR         defined_size;
+     LONG                attrs;
+     LONG                index;
+     struct recordset   *recordset;
+@@ -195,7 +195,7 @@ static HRESULT WINAPI field_get_Properties( Field *iface, Properties **obj )
+     return S_OK;
+ }
+ 
+-static HRESULT WINAPI field_get_ActualSize( Field *iface, LONG *size )
++static HRESULT WINAPI field_get_ActualSize( Field *iface, ADO_LONGPTR *size )
+ {
+     FIXME( "%p, %p\n", iface, size );
+     return E_NOTIMPL;
+@@ -211,7 +211,7 @@ static HRESULT WINAPI field_get_Attributes( Field *iface, LONG *attrs )
+     return S_OK;
+ }
+ 
+-static HRESULT WINAPI field_get_DefinedSize( Field *iface, LONG *size )
++static HRESULT WINAPI field_get_DefinedSize( Field *iface, ADO_LONGPTR *size )
+ {
+     struct field *field = impl_from_Field( iface );
+ 
+@@ -360,11 +360,11 @@ static HRESULT WINAPI field_put_Type( Field *iface, DataTypeEnum type )
+     return S_OK;
+ }
+ 
+-static HRESULT WINAPI field_put_DefinedSize( Field *iface, LONG size )
++static HRESULT WINAPI field_put_DefinedSize( Field *iface, ADO_LONGPTR size )
+ {
+     struct field *field = impl_from_Field( iface );
+ 
+-    TRACE( "%p, %d\n", field, size );
++    TRACE( "%p, %ld\n", field, size );
+ 
+     field->defined_size = size;
+     return S_OK;
+@@ -829,11 +829,11 @@ static HRESULT append_field( struct fields *fields, BSTR name, DataTypeEnum type
+     return S_OK;
+ }
+ 
+-static HRESULT WINAPI fields__Append( Fields *iface, BSTR name, DataTypeEnum type, LONG size, FieldAttributeEnum attr )
++static HRESULT WINAPI fields__Append( Fields *iface, BSTR name, DataTypeEnum type, ADO_LONGPTR size, FieldAttributeEnum attr )
+ {
+     struct fields *fields = impl_from_Fields( iface );
+ 
+-    TRACE( "%p, %s, %u, %d, %d\n", fields, debugstr_w(name), type, size, attr );
++    TRACE( "%p, %s, %u, %ld, %d\n", fields, debugstr_w(name), type, size, attr );
+ 
+     return append_field( fields, name, type, size, attr, NULL );
+ }
+@@ -844,12 +844,12 @@ static HRESULT WINAPI fields_Delete( Fields *iface, VARIANT index )
+     return E_NOTIMPL;
+ }
+ 
+-static HRESULT WINAPI fields_Append( Fields *iface, BSTR name, DataTypeEnum type, LONG size, FieldAttributeEnum attr,
++static HRESULT WINAPI fields_Append( Fields *iface, BSTR name, DataTypeEnum type, ADO_LONGPTR size, FieldAttributeEnum attr,
+                                      VARIANT value )
+ {
+     struct fields *fields = impl_from_Fields( iface );
+ 
+-    TRACE( "%p, %s, %u, %d, %d, %s\n", fields, debugstr_w(name), type, size, attr, debugstr_variant(&value) );
++    TRACE( "%p, %s, %u, %ld, %d, %s\n", fields, debugstr_w(name), type, size, attr, debugstr_variant(&value) );
+ 
+     return append_field( fields, name, type, size, attr, &value );
+ }
+@@ -1290,19 +1290,19 @@ static HRESULT WINAPI recordset_put_LockType( _Recordset *iface, LockTypeEnum lo
+     return E_NOTIMPL;
+ }
+ 
+-static HRESULT WINAPI recordset_get_MaxRecords( _Recordset *iface, LONG *max_records )
++static HRESULT WINAPI recordset_get_MaxRecords( _Recordset *iface, ADO_LONGPTR *max_records )
+ {
+     FIXME( "%p, %p\n", iface, max_records );
+     return E_NOTIMPL;
+ }
+ 
+-static HRESULT WINAPI recordset_put_MaxRecords( _Recordset *iface, LONG max_records )
++static HRESULT WINAPI recordset_put_MaxRecords( _Recordset *iface, ADO_LONGPTR max_records )
+ {
+-    FIXME( "%p, %d\n", iface, max_records );
++    FIXME( "%p, %ld\n", iface, max_records );
+     return E_NOTIMPL;
+ }
+ 
+-static HRESULT WINAPI recordset_get_RecordCount( _Recordset *iface, LONG *count )
++static HRESULT WINAPI recordset_get_RecordCount( _Recordset *iface, ADO_LONGPTR *count )
+ {
+     struct recordset *recordset = impl_from_Recordset( iface );
+ 
+@@ -1392,9 +1392,9 @@ static HRESULT WINAPI recordset_GetRows( _Recordset *iface, LONG rows, VARIANT s
+     return E_NOTIMPL;
+ }
+ 
+-static HRESULT WINAPI recordset_Move( _Recordset *iface, LONG num_records, VARIANT start )
++static HRESULT WINAPI recordset_Move( _Recordset *iface, ADO_LONGPTR num_records, VARIANT start )
+ {
+-    FIXME( "%p, %d, %s\n", iface, num_records, debugstr_variant(&start) );
++    FIXME( "%p, %ld, %s\n", iface, num_records, debugstr_variant(&start) );
+     return E_NOTIMPL;
+ }
+ 
+@@ -1591,7 +1591,7 @@ static HRESULT WINAPI recordset_put_Filter( _Recordset *iface, VARIANT criteria
+     return E_NOTIMPL;
+ }
+ 
+-static HRESULT WINAPI recordset_get_PageCount( _Recordset *iface, LONG *count )
++static HRESULT WINAPI recordset_get_PageCount( _Recordset *iface, ADO_LONGPTR *count )
+ {
+     FIXME( "%p, %p\n", iface, count );
+     return E_NOTIMPL;
+@@ -1715,10 +1715,10 @@ static HRESULT WINAPI recordset_put_MarshalOptions( _Recordset *iface, MarshalOp
+     return E_NOTIMPL;
+ }
+ 
+-static HRESULT WINAPI recordset_Find( _Recordset *iface, BSTR criteria, LONG skip_records,
++static HRESULT WINAPI recordset_Find( _Recordset *iface, BSTR criteria, ADO_LONGPTR skip_records,
+                                       SearchDirectionEnum search_direction, VARIANT start )
+ {
+-    FIXME( "%p, %s, %d, %d, %s\n", iface, debugstr_w(criteria), skip_records, search_direction,
++    FIXME( "%p, %s, %ld, %d, %s\n", iface, debugstr_w(criteria), skip_records, search_direction,
+            debugstr_variant(&start) );
+     return E_NOTIMPL;
+ }
+@@ -2061,17 +2061,17 @@ static HRESULT WINAPI rsconstruction_put_Rowset(ADORecordsetConstruction *iface,
+     return S_OK;
+ }
+ 
+-static HRESULT WINAPI rsconstruction_get_Chapter(ADORecordsetConstruction *iface, LONG *chapter)
++static HRESULT WINAPI rsconstruction_get_Chapter(ADORecordsetConstruction *iface, ADO_LONGPTR *chapter)
+ {
+     struct recordset *recordset = impl_from_ADORecordsetConstruction( iface );
+     FIXME( "%p, %p\n", recordset, chapter );
+     return E_NOTIMPL;
+ }
+ 
+-static HRESULT WINAPI rsconstruction_put_Chapter(ADORecordsetConstruction *iface, LONG chapter)
++static HRESULT WINAPI rsconstruction_put_Chapter(ADORecordsetConstruction *iface, ADO_LONGPTR chapter)
+ {
+     struct recordset *recordset = impl_from_ADORecordsetConstruction( iface );
+-    FIXME( "%p, %d\n", recordset, chapter );
++    FIXME( "%p, %ld\n", recordset, chapter );
+     return E_NOTIMPL;
+ }
+ 
+diff --git a/dlls/msado15/stream.c b/dlls/msado15/stream.c
+index 424ba722a26..ef5de1b74f8 100644
+--- a/dlls/msado15/stream.c
++++ b/dlls/msado15/stream.c
+@@ -144,7 +144,7 @@ static HRESULT WINAPI stream_Invoke( _Stream *iface, DISPID member, REFIID riid,
+     return hr;
+ }
+ 
+-static HRESULT WINAPI stream_get_Size( _Stream *iface, LONG *size )
++static HRESULT WINAPI stream_get_Size( _Stream *iface, ADO_LONGPTR *size )
+ {
+     struct stream *stream = impl_from_Stream( iface );
+     TRACE( "%p, %p\n", stream, size );
+@@ -166,7 +166,7 @@ static HRESULT WINAPI stream_get_EOS( _Stream *iface, VARIANT_BOOL *eos )
+     return S_OK;
+ }
+ 
+-static HRESULT WINAPI stream_get_Position( _Stream *iface, LONG *pos )
++static HRESULT WINAPI stream_get_Position( _Stream *iface, ADO_LONGPTR *pos )
+ {
+     struct stream *stream = impl_from_Stream( iface );
+     TRACE( "%p, %p\n", stream, pos );
+@@ -191,12 +191,12 @@ static HRESULT resize_buffer( struct stream *stream, LONG size )
+     return S_OK;
+ }
+ 
+-static HRESULT WINAPI stream_put_Position( _Stream *iface, LONG pos )
++static HRESULT WINAPI stream_put_Position( _Stream *iface, ADO_LONGPTR pos )
+ {
+     struct stream *stream = impl_from_Stream( iface );
+     HRESULT hr;
+ 
+-    TRACE( "%p, %d\n", stream, pos );
++    TRACE( "%p, %ld\n", stream, pos );
+ 
+     if (stream->state == adStateClosed) return MAKE_ADO_HRESULT( adErrObjectClosed );
+     if (pos < 0) return MAKE_ADO_HRESULT( adErrInvalidArgument );
+@@ -406,9 +406,9 @@ static HRESULT WINAPI stream_SetEOS( _Stream *iface )
+     return resize_buffer( stream, stream->pos );
+ }
+ 
+-static HRESULT WINAPI stream_CopyTo( _Stream *iface, _Stream *dst, LONG size )
++static HRESULT WINAPI stream_CopyTo( _Stream *iface, _Stream *dst, ADO_LONGPTR size )
+ {
+-    FIXME( "%p, %p, %d\n", iface, dst, size );
++    FIXME( "%p, %p, %ld\n", iface, dst, size );
+     return E_NOTIMPL;
+ }
+ 
+diff --git a/dlls/msado15/tests/msado15.c b/dlls/msado15/tests/msado15.c
+index 25c9c6f8356..39d4fdd4727 100644
+--- a/dlls/msado15/tests/msado15.c
++++ b/dlls/msado15/tests/msado15.c
+@@ -53,6 +53,7 @@ static void test_Recordset(void)
+     Properties *props;
+     Property *prop;
+     LONG count, state;
++    ADO_LONGPTR count_lp;
+     VARIANT missing, val, index;
+     CursorLocationEnum location;
+     CursorTypeEnum cursor;
+@@ -212,20 +213,20 @@ static void test_Recordset(void)
+     hr = _Recordset_put_Bookmark( recordset, bookmark );
+     ok( hr == MAKE_ADO_HRESULT( adErrInvalidArgument ), "got %08x\n", hr );
+ 
+-    count = -1;
+-    hr = _Recordset_get_RecordCount( recordset, &count );
++    count_lp = -1;
++    hr = _Recordset_get_RecordCount( recordset, &count_lp );
+     ok( hr == S_OK, "got %08x\n", hr );
+-    ok( !count, "got %d\n", count );
++    ok( !count_lp, "got %ld\n", count_lp );
+ 
+     hr = _Recordset_AddNew( recordset, missing, missing );
+     ok( hr == S_OK, "got %08x\n", hr );
+     ok( !is_eof( recordset ), "eof\n" );
+     ok( !is_bof( recordset ), "bof\n" );
+ 
+-    count = -1;
+-    hr = _Recordset_get_RecordCount( recordset, &count );
++    count_lp = -1;
++    hr = _Recordset_get_RecordCount( recordset, &count_lp );
+     ok( hr == S_OK, "got %08x\n", hr );
+-    ok( count == 1, "got %d\n", count );
++    ok( count_lp == 1, "got %ld\n", count_lp );
+ 
+     /* get_Fields still returns the same object */
+     hr = _Recordset_get_Fields( recordset, &fields2 );
+@@ -631,7 +632,7 @@ static void test_ADORecordsetConstruction(void)
+     if (count > 0)
+     {
+         VARIANT index;
+-        LONG size;
++        ADO_LONGPTR size;
+         DataTypeEnum type;
+ 
+         V_VT( &index ) = VT_BSTR;
+@@ -646,7 +647,7 @@ static void test_ADORecordsetConstruction(void)
+         size = -1;
+         hr = Field_get_DefinedSize( field, &size );
+         ok( hr == S_OK, "got %08x\n", hr );
+-        ok( size == 5, "got %d\n", size );
++        ok( size == 5, "got %ld\n", size );
+ 
+         VariantClear(&index);
+ 
+@@ -672,7 +673,8 @@ static void test_Fields(void)
+     Field *field, *field2;
+     VARIANT val, index;
+     BSTR name;
+-    LONG count, size;
++    LONG count;
++    ADO_LONGPTR size;
+     DataTypeEnum type;
+     FieldAttributeEnum attrs;
+     HRESULT hr;
+@@ -747,7 +749,7 @@ static void test_Fields(void)
+     size = -1;
+     hr = Field_get_DefinedSize( field, &size );
+     ok( hr == S_OK, "got %08x\n", hr );
+-    ok( size == 4, "got %d\n", size );
++    ok( size == 4, "got %ld\n", size );
+     attrs = 0xdead;
+     hr = Field_get_Attributes( field, &attrs );
+     ok( hr == S_OK, "got %08x\n", hr );
+@@ -785,7 +787,8 @@ static void test_Stream(void)
+     VARIANT_BOOL eos;
+     StreamTypeEnum type;
+     LineSeparatorEnum sep;
+-    LONG refs, size, pos;
++    LONG refs;
++    ADO_LONGPTR size, pos;
+     ObjectStateEnum state;
+     ConnectModeEnum mode;
+     BSTR charset, str;
+@@ -875,7 +878,7 @@ static void test_Stream(void)
+     size = -1;
+     hr = _Stream_get_Size( stream, &size );
+     ok( hr == S_OK, "got %08x\n", hr );
+-    ok( !size, "got %d\n", size );
++    ok( !size, "got %ld\n", size );
+ 
+     eos = VARIANT_FALSE;
+     hr = _Stream_get_EOS( stream, &eos );
+@@ -885,12 +888,12 @@ static void test_Stream(void)
+     pos = -1;
+     hr = _Stream_get_Position( stream, &pos );
+     ok( hr == S_OK, "got %08x\n", hr );
+-    ok( !pos, "got %d\n", pos );
++    ok( !pos, "got %ld\n", pos );
+ 
+     size = -1;
+     hr = _Stream_get_Size( stream, &size );
+     ok( hr == S_OK, "got %08x\n", hr );
+-    ok( !size, "got %d\n", size );
++    ok( !size, "got %ld\n", size );
+ 
+     hr = _Stream_Read( stream, 2, &val );
+     ok( hr == MAKE_ADO_HRESULT( adErrIllegalOperation ), "got %08x\n", hr );
+@@ -903,7 +906,7 @@ static void test_Stream(void)
+     pos = -1;
+     hr = _Stream_get_Position( stream, &pos );
+     ok( hr == S_OK, "got %08x\n", hr );
+-    ok( !pos, "got %d\n", pos );
++    ok( !pos, "got %ld\n", pos );
+ 
+     str = SysAllocString( L"test" );
+     hr = _Stream_WriteText( stream, str, adWriteChar );
+@@ -925,7 +928,7 @@ static void test_Stream(void)
+     pos = -1;
+     hr = _Stream_get_Position( stream, &pos );
+     ok( hr == S_OK, "got %08x\n", hr );
+-    ok( pos == 10, "got %d\n", pos );
++    ok( pos == 10, "got %ld\n", pos );
+ 
+     eos = VARIANT_FALSE;
+     hr = _Stream_get_EOS( stream, &eos );
+@@ -938,7 +941,7 @@ static void test_Stream(void)
+     size = -1;
+     hr = _Stream_get_Size( stream, &size );
+     ok( hr == S_OK, "got %08x\n", hr );
+-    ok( size == 10, "got %d\n", size );
++    ok( size == 10, "got %ld\n", size );
+ 
+     hr = _Stream_put_Position( stream, 2 );
+     ok( hr == S_OK, "got %08x\n", hr );
+@@ -949,12 +952,12 @@ static void test_Stream(void)
+     pos = -1;
+     hr = _Stream_get_Position( stream, &pos );
+     ok( hr == S_OK, "got %08x\n", hr );
+-    ok( pos == 2, "got %d\n", pos );
++    ok( pos == 2, "got %ld\n", pos );
+ 
+     size = -1;
+     hr = _Stream_get_Size( stream, &size );
+     ok( hr == S_OK, "got %08x\n", hr );
+-    ok( size == 2, "got %d\n", size );
++    ok( size == 2, "got %ld\n", size );
+ 
+     hr = _Stream_Close( stream );
+     ok( hr == S_OK, "got %08x\n", hr );
+@@ -1006,7 +1009,7 @@ static void test_Stream(void)
+     pos = -1;
+     hr = _Stream_get_Position( stream, &pos );
+     ok( hr == S_OK, "got %08x\n", hr );
+-    ok( pos == 4, "got %d\n", pos );
++    ok( pos == 4, "got %ld\n", pos );
+ 
+     hr = _Stream_put_Position( stream, 0 );
+     ok( hr == S_OK, "got %08x\n", hr );
+@@ -1020,7 +1023,7 @@ static void test_Stream(void)
+     pos = -1;
+     hr = _Stream_get_Position( stream, &pos );
+     ok( hr == S_OK, "got %08x\n", hr );
+-    ok( pos == 4, "got %d\n", pos );
++    ok( pos == 4, "got %ld\n", pos );
+ 
+     refs = _Stream_Release( stream );
+     ok( !refs, "got %d\n", refs );
+diff --git a/include/msado15_backcompat.idl b/include/msado15_backcompat.idl
+index fedaf557066..a8e977430c0 100644
+--- a/include/msado15_backcompat.idl
++++ b/include/msado15_backcompat.idl
+@@ -125,7 +125,13 @@ typedef [uuid(00000528-0000-0010-8000-00aa006d2ea4)] enum PositionEnum
+     adPosEOF = -3
+ } PositionEnum;
+ 
++typedef LONG_PTR ADO_LONGPTR;
++
++cpp_quote("#ifdef _WIN64")
++cpp_quote("typedef ADO_LONGPTR PositionEnum_Param;")
++cpp_quote("#else")
+ typedef [uuid(a56187c5-d690-4037-ae32-a00edc376ac3), public] PositionEnum PositionEnum_Param;
++cpp_quote("#endif")
+ 
+ typedef [uuid(0000051f-0000-0010-8000-00aa006d2ea4)] enum DataTypeEnum
+ {
+@@ -626,7 +632,7 @@ interface Field20 : _ADO
+ {
+     [id(0x00000455), propget]
+     HRESULT ActualSize(
+-        [out, retval] LONG *size);
++        [out, retval] ADO_LONGPTR *size);
+ 
+     [id(0x0000040c), propget]
+     HRESULT Attributes(
+@@ -634,7 +640,7 @@ interface Field20 : _ADO
+ 
+     [id(0x0000044f), propget]
+     HRESULT DefinedSize(
+-        [out, retval] LONG *size);
++        [out, retval] ADO_LONGPTR *size);
+ 
+     [id(0x0000044c), propget]
+     HRESULT Name(
+@@ -699,7 +705,7 @@ interface Field20 : _ADO
+ 
+     [id(0x0000044f), propput]
+     HRESULT DefinedSize(
+-        [in] LONG size);
++        [in] ADO_LONGPTR size);
+ 
+     [id(0x0000040c), propput]
+     HRESULT Attributes(
+@@ -748,7 +754,7 @@ interface Fields20 : Fields15
+     HRESULT _Append(
+         [in] BSTR name,
+         [in] DataTypeEnum type,
+-        [in, defaultvalue(0)] LONG size,
++        [in, defaultvalue(0)] ADO_LONGPTR size,
+         [in, defaultvalue(adFldUnspecified)] FieldAttributeEnum attr);
+ 
+     [id(0x60030002)]
+@@ -769,7 +775,7 @@ interface Fields : Fields20
+     HRESULT Append(
+         [in] BSTR name,
+         [in] DataTypeEnum type,
+-        [in, defaultvalue(0)] LONG size,
++        [in, defaultvalue(0)] ADO_LONGPTR size,
+         [in, defaultvalue(adFldUnspecified)] FieldAttributeEnum attr,
+         [in, optional] VARIANT value);
+ 
+@@ -859,15 +865,15 @@ interface Recordset15 : _ADO
+ 
+     [id(0x000003f1), propget]
+     HRESULT MaxRecords(
+-        [out, retval] LONG *max_records);
++        [out, retval] ADO_LONGPTR *max_records);
+ 
+     [id(0x000003f1), propput]
+     HRESULT MaxRecords(
+-        [in] LONG max_records);
++        [in] ADO_LONGPTR max_records);
+ 
+     [id(0x000003f2), propget]
+     HRESULT RecordCount(
+-        [out, retval] LONG *count);
++        [out, retval] ADO_LONGPTR *count);
+ 
+     [id(0x000003f3), propputref]
+     HRESULT Source(
+@@ -905,7 +911,7 @@ interface Recordset15 : _ADO
+ 
+     [id(0x000003f9)]
+     HRESULT Move(
+-        [in] LONG num_records,
++        [in] ADO_LONGPTR num_records,
+         [in, optional] VARIANT start);
+ 
+     [id(0x000003fa)]
+@@ -963,7 +969,7 @@ interface Recordset15 : _ADO
+ 
+     [id(0x0000041a), propget]
+     HRESULT PageCount(
+-        [out, retval] LONG *count);
++        [out, retval] ADO_LONGPTR *count);
+ 
+     [id(0x00000418), propget]
+     HRESULT PageSize(
+@@ -1040,7 +1046,7 @@ interface Recordset15 : _ADO
+     [id(0x00000422)]
+     HRESULT Find(
+         [in] BSTR criteria,
+-        [in, defaultvalue(0)] LONG skip_records,
++        [in, defaultvalue(0)] ADO_LONGPTR skip_records,
+         [in, defaultvalue(adSearchForward)] SearchDirectionEnum search_direction,
+         [in, optional] VARIANT start);
+ };
+@@ -1408,11 +1414,11 @@ interface _Parameter : _ADO
+ 
+     [id(0x6003000c), propput]
+     HRESULT Size(
+-        [in] LONG size);
++        [in] ADO_LONGPTR size);
+ 
+     [id(0x6003000c), propget]
+     HRESULT Size(
+-        [out, retval] LONG *size);
++        [out, retval] ADO_LONGPTR *size);
+ 
+     [id(0x6003000e)]
+     HRESULT AppendChunk(
+@@ -1517,7 +1523,7 @@ interface Command15 : _ADO
+         [in,  defaultvalue("")] BSTR name,
+         [in, defaultvalue(adEmpty)] DataTypeEnum type,
+         [in, defaultvalue(adParamInput)] ParameterDirectionEnum direction,
+-        [in, defaultvalue(0)] LONG size,
++        [in, defaultvalue(0)] ADO_LONGPTR size,
+         [in, optional] VARIANT value,
+         [out, retval] _Parameter **parameter);
+ 
+@@ -1844,7 +1850,7 @@ interface _Stream : IDispatch
+ {
+     [id(1), propget]
+     HRESULT Size(
+-        [out, retval] LONG *size);
++        [out, retval] ADO_LONGPTR *size);
+ 
+     [id(2), propget]
+     HRESULT EOS(
+@@ -1852,11 +1858,11 @@ interface _Stream : IDispatch
+ 
+     [id(3), propget]
+     HRESULT Position(
+-        [out, retval] LONG *position);
++        [out, retval] ADO_LONGPTR *position);
+ 
+     [id(3), propput]
+     HRESULT Position(
+-        [in] LONG position);
++        [in] ADO_LONGPTR position);
+ 
+     [id(4), propget]
+     HRESULT Type(
+@@ -1923,7 +1929,7 @@ interface _Stream : IDispatch
+     [id(15)]
+     HRESULT CopyTo(
+         [in] _Stream *dest,
+-        [in, defaultvalue(-1)] LONG size);
++        [in, defaultvalue(-1)] ADO_LONGPTR size);
+ 
+     [id(16)]
+     HRESULT Flush(void);
+@@ -2111,11 +2117,11 @@ interface ADORecordsetConstruction : IDispatch
+ 
+     [propget]
+     HRESULT Chapter(
+-        [out, retval] LONG *chapter);
++        [out, retval] ADO_LONGPTR *chapter);
+ 
+     [propput]
+     HRESULT Chapter(
+-        [in] LONG chapter);
++        [in] ADO_LONGPTR chapter);
+ 
+     [propget]
+     HRESULT RowPosition(
+
+-- 
+2.34.1
+

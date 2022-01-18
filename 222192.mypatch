@@ -1,0 +1,45 @@
+From: Dongwan Kim <kdw6485@gmail.com>
+Subject: [PATCH v2 2/3] riched20: fill REOBJECT.cp when an OLE object inserted with REO_CP_SELECTION
+Message-Id: <20211216050654.316991-2-kdw6485@gmail.com>
+Date: Thu, 16 Dec 2021 14:06:53 +0900
+In-Reply-To: <20211216050654.316991-1-kdw6485@gmail.com>
+References: <20211216050654.316991-1-kdw6485@gmail.com>
+
+The character position should be filled in REOBJECT
+which IRichEditOle::GetObject returns.
+
+Signed-off-by: Dongwan Kim <kdw6485@gmail.com>
+---
+ dlls/riched20/caret.c | 2 ++
+ dlls/riched20/run.c   | 1 +
+ 2 files changed, 3 insertions(+)
+
+diff --git a/dlls/riched20/caret.c b/dlls/riched20/caret.c
+index ebc137ebf85..50bb320c982 100644
+--- a/dlls/riched20/caret.c
++++ b/dlls/riched20/caret.c
+@@ -488,6 +488,8 @@ void editor_insert_oleobj(ME_TextEditor *editor, const REOBJECT *reo)
+       break;
+     }
+   }
++  if(run->reobj->obj.cp == REO_CP_SELECTION)
++    run->reobj->obj.cp = run->nCharOfs;
+   if (reobj_prev)
+     list_add_after(&reobj_prev->entry, &run->reobj->entry);
+   else
+diff --git a/dlls/riched20/run.c b/dlls/riched20/run.c
+index 51e768f8441..0cd0773b6b0 100644
+--- a/dlls/riched20/run.c
++++ b/dlls/riched20/run.c
+@@ -154,6 +154,7 @@ void editor_propagate_char_ofs( ME_Paragraph *para, ME_Run *run, int shift )
+         do
+         {
+             run->nCharOfs += shift;
++            if(run->reobj) run->reobj->obj.cp = run->nCharOfs;
+             run = run_next( run );
+         } while (run);
+     }
+
+-- 
+2.30.2
+

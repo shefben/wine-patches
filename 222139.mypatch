@@ -1,0 +1,244 @@
+From: Eric Pouech <eric.pouech@gmail.com>
+Subject: [PATCH 5/5] dbghelp/msc: support and create a couple more of basic types
+Message-Id: <163957153797.312873.9531270938017043502.stgit@euterpe>
+Date: Wed, 15 Dec 2021 13:32:18 +0100
+In-Reply-To: <163956392092.312873.414496354310104456.stgit@euterpe>
+References: <163956392092.312873.414496354310104456.stgit@euterpe>
+
+Signed-off-by: Eric Pouech <eric.pouech@gmail.com>
+
+---
+ dlls/dbghelp/msc.c     |   20 ++++++++++++++++++++
+ include/wine/mscvpdb.h |   32 ++++++++++++++++++++++++++++++--
+ 2 files changed, 50 insertions(+), 2 deletions(-)
+
+diff --git a/dlls/dbghelp/msc.c b/dlls/dbghelp/msc.c
+index aa212a65cbd..c55165011c2 100644
+--- a/dlls/dbghelp/msc.c
++++ b/dlls/dbghelp/msc.c
+@@ -173,17 +173,22 @@ static void codeview_init_basic_types(struct module* module)
+     cv_basic_types[T_REAL32] = &symt_new_basic(module, btFloat, "float", 4)->symt;
+     cv_basic_types[T_REAL64] = &symt_new_basic(module, btFloat, "double", 8)->symt;
+     cv_basic_types[T_REAL80] = &symt_new_basic(module, btFloat, "long double", 10)->symt;
++    cv_basic_types[T_REAL128]= &symt_new_basic(module, btFloat, "double double", 16)->symt;
+     cv_basic_types[T_RCHAR]  = &symt_new_basic(module, btInt,   "signed char", 1)->symt;
+     cv_basic_types[T_WCHAR]  = &symt_new_basic(module, btWChar, "wchar_t", 2)->symt;
+     cv_basic_types[T_CHAR16] = &symt_new_basic(module, btChar16,"char16_t", 2)->symt;
+     cv_basic_types[T_CHAR32] = &symt_new_basic(module, btChar32,"char32_t", 4)->symt;
+     cv_basic_types[T_CHAR8]  = &symt_new_basic(module, btChar8, "char8_t", 1)->symt;
++    cv_basic_types[T_INT1]   = &symt_new_basic(module, btInt,   "INT1", 1)->symt;
++    cv_basic_types[T_UINT1]  = &symt_new_basic(module, btUInt,  "UINT1", 1)->symt;
+     cv_basic_types[T_INT2]   = &symt_new_basic(module, btInt,   "INT2", 2)->symt;
+     cv_basic_types[T_UINT2]  = &symt_new_basic(module, btUInt,  "UINT2", 2)->symt;
+     cv_basic_types[T_INT4]   = &symt_new_basic(module, btInt,   "INT4", 4)->symt;
+     cv_basic_types[T_UINT4]  = &symt_new_basic(module, btUInt,  "UINT4", 4)->symt;
+     cv_basic_types[T_INT8]   = &symt_new_basic(module, btInt,   "INT8", 8)->symt;
+     cv_basic_types[T_UINT8]  = &symt_new_basic(module, btUInt,  "UINT8", 8)->symt;
++    cv_basic_types[T_INT16]  = &symt_new_basic(module, btInt,   "INT16", 16)->symt;
++    cv_basic_types[T_UINT16] = &symt_new_basic(module, btUInt,  "UINT16", 16)->symt;
+     cv_basic_types[T_HRESULT]= &symt_new_basic(module, btUInt,  "HRESULT", 4)->symt;
+ 
+     cv_basic_types[T_32PVOID]   = &symt_new_pointer(module, cv_basic_types[T_VOID], 4)->symt;
+@@ -202,17 +207,22 @@ static void codeview_init_basic_types(struct module* module)
+     cv_basic_types[T_32PREAL32] = &symt_new_pointer(module, cv_basic_types[T_REAL32], 4)->symt;
+     cv_basic_types[T_32PREAL64] = &symt_new_pointer(module, cv_basic_types[T_REAL64], 4)->symt;
+     cv_basic_types[T_32PREAL80] = &symt_new_pointer(module, cv_basic_types[T_REAL80], 4)->symt;
++    cv_basic_types[T_32PREAL128]= &symt_new_pointer(module, cv_basic_types[T_REAL128], 4)->symt;
+     cv_basic_types[T_32PRCHAR]  = &symt_new_pointer(module, cv_basic_types[T_RCHAR], 4)->symt;
+     cv_basic_types[T_32PWCHAR]  = &symt_new_pointer(module, cv_basic_types[T_WCHAR], 4)->symt;
+     cv_basic_types[T_32PCHAR16] = &symt_new_pointer(module, cv_basic_types[T_CHAR16], 4)->symt;
+     cv_basic_types[T_32PCHAR32] = &symt_new_pointer(module, cv_basic_types[T_CHAR32], 4)->symt;
+     cv_basic_types[T_32PCHAR8]  = &symt_new_pointer(module, cv_basic_types[T_CHAR8], 4)->symt;
++    cv_basic_types[T_32PINT1]   = &symt_new_pointer(module, cv_basic_types[T_INT1], 4)->symt;
++    cv_basic_types[T_32PUINT1]  = &symt_new_pointer(module, cv_basic_types[T_UINT1], 4)->symt;
+     cv_basic_types[T_32PINT2]   = &symt_new_pointer(module, cv_basic_types[T_INT2], 4)->symt;
+     cv_basic_types[T_32PUINT2]  = &symt_new_pointer(module, cv_basic_types[T_UINT2], 4)->symt;
+     cv_basic_types[T_32PINT4]   = &symt_new_pointer(module, cv_basic_types[T_INT4], 4)->symt;
+     cv_basic_types[T_32PUINT4]  = &symt_new_pointer(module, cv_basic_types[T_UINT4], 4)->symt;
+     cv_basic_types[T_32PINT8]   = &symt_new_pointer(module, cv_basic_types[T_INT8], 4)->symt;
+     cv_basic_types[T_32PUINT8]  = &symt_new_pointer(module, cv_basic_types[T_UINT8], 4)->symt;
++    cv_basic_types[T_32PINT16]  = &symt_new_pointer(module, cv_basic_types[T_INT16], 4)->symt;
++    cv_basic_types[T_32PUINT16] = &symt_new_pointer(module, cv_basic_types[T_UINT16], 4)->symt;
+     cv_basic_types[T_32PHRESULT]= &symt_new_pointer(module, cv_basic_types[T_HRESULT], 4)->symt;
+ 
+     cv_basic_types[T_64PVOID]   = &symt_new_pointer(module, cv_basic_types[T_VOID], 8)->symt;
+@@ -231,17 +241,22 @@ static void codeview_init_basic_types(struct module* module)
+     cv_basic_types[T_64PREAL32] = &symt_new_pointer(module, cv_basic_types[T_REAL32], 8)->symt;
+     cv_basic_types[T_64PREAL64] = &symt_new_pointer(module, cv_basic_types[T_REAL64], 8)->symt;
+     cv_basic_types[T_64PREAL80] = &symt_new_pointer(module, cv_basic_types[T_REAL80], 8)->symt;
++    cv_basic_types[T_64PREAL128]= &symt_new_pointer(module, cv_basic_types[T_REAL128], 8)->symt;
+     cv_basic_types[T_64PRCHAR]  = &symt_new_pointer(module, cv_basic_types[T_RCHAR], 8)->symt;
+     cv_basic_types[T_64PWCHAR]  = &symt_new_pointer(module, cv_basic_types[T_WCHAR], 8)->symt;
+     cv_basic_types[T_64PCHAR16] = &symt_new_pointer(module, cv_basic_types[T_CHAR16], 8)->symt;
+     cv_basic_types[T_64PCHAR32] = &symt_new_pointer(module, cv_basic_types[T_CHAR32], 8)->symt;
+     cv_basic_types[T_64PCHAR8]  = &symt_new_pointer(module, cv_basic_types[T_CHAR8], 8)->symt;
++    cv_basic_types[T_64PINT1]   = &symt_new_pointer(module, cv_basic_types[T_INT1], 8)->symt;
++    cv_basic_types[T_64PUINT1]  = &symt_new_pointer(module, cv_basic_types[T_UINT1], 8)->symt;
+     cv_basic_types[T_64PINT2]   = &symt_new_pointer(module, cv_basic_types[T_INT2], 8)->symt;
+     cv_basic_types[T_64PUINT2]  = &symt_new_pointer(module, cv_basic_types[T_UINT2], 8)->symt;
+     cv_basic_types[T_64PINT4]   = &symt_new_pointer(module, cv_basic_types[T_INT4], 8)->symt;
+     cv_basic_types[T_64PUINT4]  = &symt_new_pointer(module, cv_basic_types[T_UINT4], 8)->symt;
+     cv_basic_types[T_64PINT8]   = &symt_new_pointer(module, cv_basic_types[T_INT8], 8)->symt;
+     cv_basic_types[T_64PUINT8]  = &symt_new_pointer(module, cv_basic_types[T_UINT8], 8)->symt;
++    cv_basic_types[T_64PINT16]  = &symt_new_pointer(module, cv_basic_types[T_INT16], 8)->symt;
++    cv_basic_types[T_64PUINT16] = &symt_new_pointer(module, cv_basic_types[T_UINT16], 8)->symt;
+     cv_basic_types[T_64PHRESULT]= &symt_new_pointer(module, cv_basic_types[T_HRESULT], 8)->symt;
+ 
+     cv_basic_types[T_PVOID]   = &symt_new_pointer(module, cv_basic_types[T_VOID],   ptrsz)->symt;
+@@ -260,17 +275,22 @@ static void codeview_init_basic_types(struct module* module)
+     cv_basic_types[T_PREAL32] = &symt_new_pointer(module, cv_basic_types[T_REAL32], ptrsz)->symt;
+     cv_basic_types[T_PREAL64] = &symt_new_pointer(module, cv_basic_types[T_REAL64], ptrsz)->symt;
+     cv_basic_types[T_PREAL80] = &symt_new_pointer(module, cv_basic_types[T_REAL80], ptrsz)->symt;
++    cv_basic_types[T_PREAL128]= &symt_new_pointer(module, cv_basic_types[T_REAL128],ptrsz)->symt;
+     cv_basic_types[T_PRCHAR]  = &symt_new_pointer(module, cv_basic_types[T_RCHAR],  ptrsz)->symt;
+     cv_basic_types[T_PWCHAR]  = &symt_new_pointer(module, cv_basic_types[T_WCHAR],  ptrsz)->symt;
+     cv_basic_types[T_PCHAR16] = &symt_new_pointer(module, cv_basic_types[T_CHAR16], ptrsz)->symt;
+     cv_basic_types[T_PCHAR32] = &symt_new_pointer(module, cv_basic_types[T_CHAR32], ptrsz)->symt;
+     cv_basic_types[T_PCHAR8]  = &symt_new_pointer(module, cv_basic_types[T_CHAR8],  ptrsz)->symt;
++    cv_basic_types[T_PINT1]   = &symt_new_pointer(module, cv_basic_types[T_INT1],   ptrsz)->symt;
++    cv_basic_types[T_PUINT1]  = &symt_new_pointer(module, cv_basic_types[T_UINT1],  ptrsz)->symt;
+     cv_basic_types[T_PINT2]   = &symt_new_pointer(module, cv_basic_types[T_INT2],   ptrsz)->symt;
+     cv_basic_types[T_PUINT2]  = &symt_new_pointer(module, cv_basic_types[T_UINT2],  ptrsz)->symt;
+     cv_basic_types[T_PINT4]   = &symt_new_pointer(module, cv_basic_types[T_INT4],   ptrsz)->symt;
+     cv_basic_types[T_PUINT4]  = &symt_new_pointer(module, cv_basic_types[T_UINT4],  ptrsz)->symt;
+     cv_basic_types[T_PINT8]   = &symt_new_pointer(module, cv_basic_types[T_INT8],   ptrsz)->symt;
+     cv_basic_types[T_PUINT8]  = &symt_new_pointer(module, cv_basic_types[T_UINT8],  ptrsz)->symt;
++    cv_basic_types[T_PINT16]  = &symt_new_pointer(module, cv_basic_types[T_INT16],  ptrsz)->symt;
++    cv_basic_types[T_PUINT16] = &symt_new_pointer(module, cv_basic_types[T_UINT16], ptrsz)->symt;
+ }
+ 
+ static int leaf_as_variant(VARIANT* v, const unsigned short int* leaf)
+diff --git a/include/wine/mscvpdb.h b/include/wine/mscvpdb.h
+index 5a09b9653a3..6336cf23d98 100644
+--- a/include/wine/mscvpdb.h
++++ b/include/wine/mscvpdb.h
+@@ -946,14 +946,18 @@ union codeview_fieldtype
+ #define T_CPLX128           0x0053  /* 128-bit complex number */
+ #define T_BIT               0x0060  /* bit */
+ #define T_PASCHAR           0x0061  /* pascal CHAR */
++#define T_INT1              0x0068  /* 8-bit signed int */
++#define T_UINT1             0x0069  /* 8-bit unsigned int */
+ #define T_RCHAR             0x0070  /* real char */
+ #define T_WCHAR             0x0071  /* wide char */
+ #define T_INT2              0x0072  /* real 16-bit signed int */
+ #define T_UINT2             0x0073  /* real 16-bit unsigned int */
+-#define T_INT4              0x0074  /* int */
+-#define T_UINT4             0x0075  /* unsigned int */
++#define T_INT4              0x0074  /* 32-bit int */
++#define T_UINT4             0x0075  /* 32-bit unsigned int */
+ #define T_INT8              0x0076  /* 64-bit signed int */
+ #define T_UINT8             0x0077  /* 64-bit unsigned int */
++#define T_INT16             0x0078  /* 128-bit signed int */
++#define T_UINT16            0x0079  /* 128-bit signed int */
+ #define T_CHAR16            0x007a  /* 16-bit unicode char */
+ #define T_CHAR32            0x007b  /* 32-bit unicode char */
+ #define T_CHAR8             0x007c  /* 8-bit unicode char (C++ 20) */
+@@ -981,6 +985,8 @@ union codeview_fieldtype
+ #define T_PCPLX64           0x0151  /* Near pointer to 64-bit complex */
+ #define T_PCPLX80           0x0152  /* Near pointer to 80-bit complex */
+ #define T_PCPLX128          0x0153  /* Near pointer to 128-bit complex */
++#define T_PINT1             0x0168  /* Near pointer to 8-bit signed int */
++#define T_PUINT1            0x0169  /* Near pointer to 8-bit unsigned int */
+ #define T_PRCHAR            0x0170  /* Near pointer to a real char */
+ #define T_PWCHAR            0x0171  /* Near pointer to a wide char */
+ #define T_PINT2             0x0172  /* Near pointer to 16-bit signed int */
+@@ -989,6 +995,8 @@ union codeview_fieldtype
+ #define T_PUINT4            0x0175  /* Near pointer to 32-bit unsigned int */
+ #define T_PINT8             0x0176  /* Near pointer to 64-bit signed int */
+ #define T_PUINT8            0x0177  /* Near pointer to 64-bit unsigned int */
++#define T_PINT16            0x0178  /* Near pointer to 128-bit signed int */
++#define T_PUINT16           0x0179  /* Near pointer to 128-bit unsigned int */
+ #define T_PCHAR16           0x017a  /* Near pointer to 16-bit unicode char */
+ #define T_PCHAR32           0x017b  /* Near pointer to 32-bit unicode char */
+ #define T_PCHAR8            0x017c  /* Near pointer to 8-bit unicode char */
+@@ -1016,6 +1024,8 @@ union codeview_fieldtype
+ #define T_PFCPLX64          0x0251  /* Far pointer to 64-bit complex */
+ #define T_PFCPLX80          0x0252  /* Far pointer to 80-bit complex */
+ #define T_PFCPLX128         0x0253  /* Far pointer to 128-bit complex */
++#define T_PFINT1            0x0268  /* Far pointer to 8-bit signed int */
++#define T_PFUINT1           0x0269  /* Far pointer to 8-bit unsigned int */
+ #define T_PFRCHAR           0x0270  /* Far pointer to a real char */
+ #define T_PFWCHAR           0x0271  /* Far pointer to a wide char */
+ #define T_PFINT2            0x0272  /* Far pointer to 16-bit signed int */
+@@ -1024,6 +1034,8 @@ union codeview_fieldtype
+ #define T_PFUINT4           0x0275  /* Far pointer to 32-bit unsigned int */
+ #define T_PFINT8            0x0276  /* Far pointer to 64-bit signed int */
+ #define T_PFUINT8           0x0277  /* Far pointer to 64-bit unsigned int */
++#define T_PFINT16           0x0278  /* Far pointer to 128-bit signed int */
++#define T_PFUINT16          0x0279  /* Far pointer to 128-bit unsigned int */
+ #define T_PFCHAR16          0x027a  /* Far pointer to 16-bit unicode char */
+ #define T_PFCHAR32          0x027b  /* Far pointer to 32-bit unicode char */
+ #define T_PFCHAR8           0x027c  /* Far pointer to 8-bit unicode char */
+@@ -1051,6 +1063,8 @@ union codeview_fieldtype
+ #define T_PHCPLX64          0x0351  /* Huge pointer to 64-bit complex */
+ #define T_PHCPLX80          0x0352  /* Huge pointer to 80-bit complex */
+ #define T_PHCPLX128         0x0353  /* Huge pointer to 128-bit real */
++#define T_PHINT1            0x0368  /* Huge pointer to 8-bit signed int */
++#define T_PHUINT1           0x0369  /* Huge pointer to 8-bit unsigned int */
+ #define T_PHRCHAR           0x0370  /* Huge pointer to a real char */
+ #define T_PHWCHAR           0x0371  /* Huge pointer to a wide char */
+ #define T_PHINT2            0x0372  /* Huge pointer to 16-bit signed int */
+@@ -1059,6 +1073,8 @@ union codeview_fieldtype
+ #define T_PHUINT4           0x0375  /* Huge pointer to 32-bit unsigned int */
+ #define T_PHINT8            0x0376  /* Huge pointer to 64-bit signed int */
+ #define T_PHUINT8           0x0377  /* Huge pointer to 64-bit unsigned int */
++#define T_PHINT16           0x0378  /* Huge pointer to 128-bit signed int */
++#define T_PHUINT16          0x0379  /* Huge pointer to 128-bit unsigned int */
+ #define T_PHCHAR16          0x037a  /* Huge pointer to 16-bit unicode char */
+ #define T_PHCHAR32          0x037b  /* Huge pointer to 32-bit unicode char */
+ #define T_PHCHAR8           0x037c  /* Huge pointer to 8-bit unicode char */
+@@ -1087,6 +1103,8 @@ union codeview_fieldtype
+ #define T_32PCPLX64         0x0451  /* 16:32 near pointer to 64-bit complex */
+ #define T_32PCPLX80         0x0452  /* 16:32 near pointer to 80-bit complex */
+ #define T_32PCPLX128        0x0453  /* 16:32 near pointer to 128-bit complex */
++#define T_32PINT1           0x0468  /* 16:32 near pointer to 8-bit signed int */
++#define T_32PUINT1          0x0469  /* 16:32 near pointer to 8-bit unsigned int */
+ #define T_32PRCHAR          0x0470  /* 16:32 near pointer to a real char */
+ #define T_32PWCHAR          0x0471  /* 16:32 near pointer to a wide char */
+ #define T_32PINT2           0x0472  /* 16:32 near pointer to 16-bit signed int */
+@@ -1095,6 +1113,8 @@ union codeview_fieldtype
+ #define T_32PUINT4          0x0475  /* 16:32 near pointer to 32-bit unsigned int */
+ #define T_32PINT8           0x0476  /* 16:32 near pointer to 64-bit signed int */
+ #define T_32PUINT8          0x0477  /* 16:32 near pointer to 64-bit unsigned int */
++#define T_32PINT16          0x0478  /* 16:32 near pointer to 128-bit signed int */
++#define T_32PUINT16         0x0479  /* 16:32 near pointer to 128-bit unsigned int */
+ #define T_32PCHAR16         0x047a  /* 16:32 near pointer to 16-bit unicode char */
+ #define T_32PCHAR32         0x047b  /* 16:32 near pointer to 32-bit unicode char */
+ #define T_32PCHAR8          0x047c  /* 16:32 near pointer to 8-bit unicode char */
+@@ -1123,6 +1143,8 @@ union codeview_fieldtype
+ #define T_32PFCPLX64        0x0551  /* 16:32 far pointer to 64-bit complex */
+ #define T_32PFCPLX80        0x0552  /* 16:32 far pointer to 80-bit complex */
+ #define T_32PFCPLX128       0x0553  /* 16:32 far pointer to 128-bit complex */
++#define T_32PFINT1          0x0468  /* 16:32 far pointer to 8-bit signed int */
++#define T_32PFUINT1         0x0469  /* 16:32 far pointer to 8-bit unsigned int */
+ #define T_32PFRCHAR         0x0570  /* 16:32 far pointer to a real char */
+ #define T_32PFWCHAR         0x0571  /* 16:32 far pointer to a wide char */
+ #define T_32PFINT2          0x0572  /* 16:32 far pointer to 16-bit signed int */
+@@ -1131,6 +1153,8 @@ union codeview_fieldtype
+ #define T_32PFUINT4         0x0575  /* 16:32 far pointer to 32-bit unsigned int */
+ #define T_32PFINT8          0x0576  /* 16:32 far pointer to 64-bit signed int */
+ #define T_32PFUINT8         0x0577  /* 16:32 far pointer to 64-bit unsigned int */
++#define T_32PFINT16         0x0578  /* 16:32 far pointer to 128-bit signed int */
++#define T_32PFUINT16        0x0579  /* 16:32 far pointer to 128-bit unsigned int */
+ #define T_32PFCHAR16        0x057a  /* 16:32 far pointer to 16-bit unicode char */
+ #define T_32PFCHAR32        0x057b  /* 16:32 far pointer to 32-bit unicode char */
+ #define T_32PFCHAR8         0x057c  /* 16:32 far pointer to 8-bit unicode char */
+@@ -1159,6 +1183,8 @@ union codeview_fieldtype
+ #define T_64PCPLX64         0x0651  /* 64 near pointer to 64-bit complex */
+ #define T_64PCPLX80         0x0652  /* 64 near pointer to 80-bit complex */
+ #define T_64PCPLX128        0x0653  /* 64 near pointer to 128-bit complex */
++#define T_64PINT1           0x0468  /* 64 near pointer to 8-bit signed int */
++#define T_64PUINT1          0x0469  /* 64 near pointer to 8-bit unsigned int */
+ #define T_64PRCHAR          0x0670  /* 64 near pointer to a real char */
+ #define T_64PWCHAR          0x0671  /* 64 near pointer to a wide char */
+ #define T_64PINT2           0x0672  /* 64 near pointer to 16-bit signed int */
+@@ -1167,6 +1193,8 @@ union codeview_fieldtype
+ #define T_64PUINT4          0x0675  /* 64 near pointer to 32-bit unsigned int */
+ #define T_64PINT8           0x0676  /* 64 near pointer to 64-bit signed int */
+ #define T_64PUINT8          0x0677  /* 64 near pointer to 64-bit unsigned int */
++#define T_64PINT16          0x0678  /* 64 near pointer to 128-bit signed int */
++#define T_64PUINT16         0x0679  /* 64 near pointer to 128-bit unsigned int */
+ #define T_64PCHAR16         0x067a  /* 64 near pointer to 16-bit unicode char */
+ #define T_64PCHAR32         0x067b  /* 64 near pointer to 32-bit unicode char */
+ #define T_64PCHAR8          0x067c  /* 64 near pointer to 8-bit unicode char */
+

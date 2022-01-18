@@ -1,0 +1,426 @@
+From: Eric Pouech <eric.pouech@gmail.com>
+Subject: [PATCH 16/19] programs/winedbg: move type lookup at parsing time for cast operation
+Message-Id: <163897111487.528091.9714790366998822502.stgit@euterpe>
+Date: Wed,  8 Dec 2021 14:45:14 +0100
+In-Reply-To: <163897087724.528091.10090935688970751662.stgit@euterpe>
+References: <163897087724.528091.10090935688970751662.stgit@euterpe>
+
+Signed-off-by: Eric Pouech <eric.pouech@gmail.com>
+
+---
+ programs/winedbg/dbg.y      |   61 +++++++++++++++-------------
+ programs/winedbg/debug.l    |    9 ++++
+ programs/winedbg/debugger.h |   24 +----------
+ programs/winedbg/expr.c     |   71 +++-----------------------------
+ programs/winedbg/types.c    |   95 +++++++++++++++++++++++--------------------
+ 5 files changed, 101 insertions(+), 159 deletions(-)
+
+diff --git a/programs/winedbg/dbg.y b/programs/winedbg/dbg.y
+index 3e6ef34b836..3fc5a87c0b5 100644
+--- a/programs/winedbg/dbg.y
++++ b/programs/winedbg/dbg.y
+@@ -42,7 +42,7 @@ static void parser(const char*);
+     dbg_lgint_t         integer;
+     IMAGEHLP_LINE64     listing;
+     struct expr*        expression;
+-    struct type_expr_t  type;
++    struct dbg_type     type;
+     struct list_string* strings;
+ }
+ 
+@@ -55,6 +55,7 @@ static void parser(const char*);
+ %token tSTEPI tNEXTI tFINISH tSHOW tDIR tWHATIS tSOURCE
+ %token <string> tPATH tIDENTIFIER tSTRING tINTVAR
+ %token <integer> tNUM tFORMAT
++%token <type> tTYPEDEF
+ %token tSYMBOLFILE tRUN tATTACH tDETACH tKILL tMAINTENANCE tTYPE tMINIDUMP
+ %token tNOPROCESS
+ 
+@@ -303,32 +304,38 @@ noprocess_state:
+     ;
+ 
+ type_expr:
+-      tCHAR			{ $$.type = type_expr_type_id; $$.deref_count = 0; $$.u.type.module = 0; $$.u.type.id = dbg_itype_char; }
+-    | tINT			{ $$.type = type_expr_type_id; $$.deref_count = 0; $$.u.type.module = 0; $$.u.type.id = dbg_itype_signed_int; }
+-    | tLONG tINT		{ $$.type = type_expr_type_id; $$.deref_count = 0; $$.u.type.module = 0; $$.u.type.id = dbg_itype_signed_long_int; }
+-    | tLONG     		{ $$.type = type_expr_type_id; $$.deref_count = 0; $$.u.type.module = 0; $$.u.type.id = dbg_itype_signed_long_int; }
+-    | tUNSIGNED tINT		{ $$.type = type_expr_type_id; $$.deref_count = 0; $$.u.type.module = 0; $$.u.type.id = dbg_itype_unsigned_int; }
+-    | tUNSIGNED 		{ $$.type = type_expr_type_id; $$.deref_count = 0; $$.u.type.module = 0; $$.u.type.id = dbg_itype_unsigned_int; }
+-    | tLONG tUNSIGNED tINT	{ $$.type = type_expr_type_id; $$.deref_count = 0; $$.u.type.module = 0; $$.u.type.id = dbg_itype_unsigned_long_int; }
+-    | tLONG tUNSIGNED   	{ $$.type = type_expr_type_id; $$.deref_count = 0; $$.u.type.module = 0; $$.u.type.id = dbg_itype_unsigned_long_int; }
+-    | tSHORT tINT		{ $$.type = type_expr_type_id; $$.deref_count = 0; $$.u.type.module = 0; $$.u.type.id = dbg_itype_signed_short_int; }
+-    | tSHORT    		{ $$.type = type_expr_type_id; $$.deref_count = 0; $$.u.type.module = 0; $$.u.type.id = dbg_itype_signed_short_int; }
+-    | tSHORT tUNSIGNED tINT	{ $$.type = type_expr_type_id; $$.deref_count = 0; $$.u.type.module = 0; $$.u.type.id = dbg_itype_unsigned_short_int; }
+-    | tSHORT tUNSIGNED  	{ $$.type = type_expr_type_id; $$.deref_count = 0; $$.u.type.module = 0; $$.u.type.id = dbg_itype_unsigned_short_int; }
+-    | tSIGNED tCHAR		{ $$.type = type_expr_type_id; $$.deref_count = 0; $$.u.type.module = 0; $$.u.type.id = dbg_itype_signed_char_int; }
+-    | tUNSIGNED tCHAR		{ $$.type = type_expr_type_id; $$.deref_count = 0; $$.u.type.module = 0; $$.u.type.id = dbg_itype_unsigned_char_int; }
+-    | tLONG tLONG tUNSIGNED tINT{ $$.type = type_expr_type_id; $$.deref_count = 0; $$.u.type.module = 0; $$.u.type.id = dbg_itype_unsigned_longlong_int; }
+-    | tLONG tLONG tUNSIGNED     { $$.type = type_expr_type_id; $$.deref_count = 0; $$.u.type.module = 0; $$.u.type.id = dbg_itype_unsigned_longlong_int; }
+-    | tLONG tLONG tINT          { $$.type = type_expr_type_id; $$.deref_count = 0; $$.u.type.module = 0; $$.u.type.id = dbg_itype_signed_longlong_int; }
+-    | tLONG tLONG               { $$.type = type_expr_type_id; $$.deref_count = 0; $$.u.type.module = 0; $$.u.type.id = dbg_itype_signed_longlong_int; }
+-    | tFLOAT			{ $$.type = type_expr_type_id; $$.deref_count = 0; $$.u.type.module = 0; $$.u.type.id = dbg_itype_short_real; }
+-    | tDOUBLE			{ $$.type = type_expr_type_id; $$.deref_count = 0; $$.u.type.module = 0; $$.u.type.id = dbg_itype_real; }
+-    | tLONG tDOUBLE		{ $$.type = type_expr_type_id; $$.deref_count = 0; $$.u.type.module = 0; $$.u.type.id = dbg_itype_long_real; }
+-    | type_expr '*'		{ $$ = $1; $$.deref_count++; }
+-    | tCLASS identifier         { $$.type = type_expr_udt_class; $$.deref_count = 0; $$.u.name = $2; }
+-    | tSTRUCT identifier        { $$.type = type_expr_udt_struct; $$.deref_count = 0; $$.u.name = $2; }
+-    | tUNION identifier         { $$.type = type_expr_udt_union; $$.deref_count = 0; $$.u.name = $2; }
+-    | tENUM identifier          { $$.type = type_expr_enumeration; $$.deref_count = 0; $$.u.name = $2; }
++      tCHAR                     { $$.module = 0; $$.id = dbg_itype_char; }
++    | tINT                      { $$.module = 0; $$.id = dbg_itype_signed_int; }
++    | tLONG tINT                { $$.module = 0; $$.id = dbg_itype_signed_long_int; }
++    | tLONG                     { $$.module = 0; $$.id = dbg_itype_signed_long_int; }
++    | tUNSIGNED tINT            { $$.module = 0; $$.id = dbg_itype_unsigned_int; }
++    | tUNSIGNED                 { $$.module = 0; $$.id = dbg_itype_unsigned_int; }
++    | tLONG tUNSIGNED tINT      { $$.module = 0; $$.id = dbg_itype_unsigned_long_int; }
++    | tUNSIGNED tLONG tINT      { $$.module = 0; $$.id = dbg_itype_unsigned_long_int; }
++    | tLONG tUNSIGNED           { $$.module = 0; $$.id = dbg_itype_unsigned_long_int; }
++    | tUNSIGNED tLONG           { $$.module = 0; $$.id = dbg_itype_unsigned_long_int; }
++    | tSHORT tINT               { $$.module = 0; $$.id = dbg_itype_signed_short_int; }
++    | tSHORT                    { $$.module = 0; $$.id = dbg_itype_signed_short_int; }
++    | tSHORT tUNSIGNED tINT     { $$.module = 0; $$.id = dbg_itype_unsigned_short_int; }
++    | tUNSIGNED tSHORT tINT     { $$.module = 0; $$.id = dbg_itype_unsigned_short_int; }
++    | tSHORT tUNSIGNED          { $$.module = 0; $$.id = dbg_itype_unsigned_short_int; }
++    | tUNSIGNED tSHORT          { $$.module = 0; $$.id = dbg_itype_unsigned_short_int; }
++    | tSIGNED tCHAR             { $$.module = 0; $$.id = dbg_itype_signed_char_int; }
++    | tUNSIGNED tCHAR           { $$.module = 0; $$.id = dbg_itype_unsigned_char_int; }
++    | tLONG tLONG tUNSIGNED tINT{ $$.module = 0; $$.id = dbg_itype_unsigned_longlong_int; }
++    | tLONG tLONG tUNSIGNED     { $$.module = 0; $$.id = dbg_itype_unsigned_longlong_int; }
++    | tUNSIGNED tLONG tLONG     { $$.module = 0; $$.id = dbg_itype_unsigned_longlong_int; }
++    | tLONG tLONG tINT          { $$.module = 0; $$.id = dbg_itype_signed_longlong_int; }
++    | tLONG tLONG               { $$.module = 0; $$.id = dbg_itype_signed_longlong_int; }
++    | tFLOAT                    { $$.module = 0; $$.id = dbg_itype_short_real; }
++    | tDOUBLE                   { $$.module = 0; $$.id = dbg_itype_real; }
++    | tLONG tDOUBLE             { $$.module = 0; $$.id = dbg_itype_long_real; }
++    | tTYPEDEF                  { $$ = $1; }
++    | type_expr '*'             { if (!types_find_pointer(&$1, &$$)) {yyerror("Cannot find pointer type\n"); YYERROR; } }
++    | tCLASS identifier         { if (!types_find_type($2, SymTagUDT, &$$)) {yyerror("Unknown type\n"); YYERROR; } }
++    | tSTRUCT identifier        { if (!types_find_type($2, SymTagUDT, &$$)) {yyerror("Unknown type\n"); YYERROR; } }
++    | tUNION identifier         { if (!types_find_type($2, SymTagUDT, &$$)) {yyerror("Unknown type\n"); YYERROR; } }
++    | tENUM identifier          { if (!types_find_type($2, SymTagEnum, &$$)) {yyerror("Unknown type\n"); YYERROR; } }
+     ;
+ 
+ expr_lvalue:
+diff --git a/programs/winedbg/debug.l b/programs/winedbg/debug.l
+index 280013799c9..eea31f30c97 100644
+--- a/programs/winedbg/debug.l
++++ b/programs/winedbg/debug.l
+@@ -88,6 +88,13 @@ static char* unescape_string(const char* str)
+     return ret;
+ }
+ 
++static int resolve_identifier(const char* id, YYSTYPE* lval)
++{
++    if (types_find_type(id, SymTagTypedef, &lval->type)) return tTYPEDEF;
++    lval->string = lexeme_alloc(id);
++    return tIDENTIFIER;
++}
++
+ #define YY_INPUT(buf,result,max_size) \
+         (result = input_lex_read_buffer(buf, max_size))
+ 
+@@ -244,7 +251,7 @@ union					{ return tUNION; }
+ enum					{ return tENUM; }
+ all                                     { return tALL; }
+ 
+-{MODULE_IDENTIFIER}?{SCOPED_IDENTIFIER}*{IDENTIFIER}	{ dbg_lval.string = lexeme_alloc(yytext); return tIDENTIFIER; }
++{MODULE_IDENTIFIER}?{SCOPED_IDENTIFIER}*{IDENTIFIER} { return resolve_identifier(yytext, &dbg_lval); }
+ "$"{IDENTIFIER}				{ dbg_lval.string = lexeme_alloc(yytext+1); return tINTVAR; }
+ 
+ <PATH_EXPECTED,PATH_ACCEPTED>{PATHNAME}	{ dbg_lval.string = lexeme_alloc(yytext); return tPATH; }
+diff --git a/programs/winedbg/debugger.h b/programs/winedbg/debugger.h
+index a29b731017f..6bc6d8a1954 100644
+--- a/programs/winedbg/debugger.h
++++ b/programs/winedbg/debugger.h
+@@ -297,26 +297,6 @@ struct dbg_internal_var
+ 
+ enum sym_get_lval {sglv_found, sglv_unknown, sglv_aborted};
+ 
+-enum type_expr_e
+-{
+-    type_expr_type_id,
+-    type_expr_udt_class,
+-    type_expr_udt_struct,
+-    type_expr_udt_union,
+-    type_expr_enumeration
+-};
+-
+-struct type_expr_t
+-{ 
+-    enum type_expr_e    type;
+-    unsigned            deref_count;
+-    union
+-    {
+-        struct dbg_type type;
+-        const char*     name;
+-    } u;
+-};
+-
+ enum dbg_start {start_ok, start_error_parse, start_error_init};
+ 
+   /* break.c */
+@@ -372,7 +352,7 @@ extern struct expr*     expr_alloc_unary_op(int oper, struct expr*);
+ extern struct expr*     expr_alloc_pstruct(struct expr*, const char* element);
+ extern struct expr*     expr_alloc_struct(struct expr*, const char* element);
+ extern struct expr*     WINAPIV expr_alloc_func_call(const char*, int nargs, ...);
+-extern struct expr*     expr_alloc_typecast(struct type_expr_t*, struct expr*);
++extern struct expr*     expr_alloc_typecast(struct dbg_type*, struct expr*);
+ extern struct dbg_lvalue expr_eval(struct expr*);
+ extern struct expr*     expr_clone(const struct expr* exp, BOOL *local_binding);
+ extern BOOL             expr_free(struct expr* exp);
+@@ -499,7 +479,7 @@ extern BOOL             types_get_info(const struct dbg_type*, IMAGEHLP_SYMBOL_T
+ extern BOOL             types_get_type(const struct dbg_type*, struct dbg_type* ret);
+ extern BOOL             types_get_real_type(struct dbg_type* type, DWORD* tag);
+ extern BOOL             types_find_pointer(const struct dbg_type* type, struct dbg_type* pttype);
+-extern struct dbg_type  types_find_type(DWORD64 linear, const char* name, enum SymTagEnum tag);
++extern BOOL             types_find_type(const char* name, enum SymTagEnum tag, struct dbg_type* type);
+ extern BOOL             types_compare(const struct dbg_type, const struct dbg_type, BOOL* equal);
+ extern BOOL             types_is_integral_type(const struct dbg_lvalue*);
+ extern BOOL             types_is_float_type(const struct dbg_lvalue*);
+diff --git a/programs/winedbg/expr.c b/programs/winedbg/expr.c
+index bd48e3e868f..7a7c2013578 100644
+--- a/programs/winedbg/expr.c
++++ b/programs/winedbg/expr.c
+@@ -75,7 +75,7 @@ struct expr
+ 
+         struct
+         {
+-            struct type_expr_t  cast_to;
++            struct dbg_type     cast_to;
+             struct expr*        expr;
+         } cast;
+ 
+@@ -128,14 +128,14 @@ void expr_free_all(void)
+     next_expr_free = 0;
+ }
+ 
+-struct expr* expr_alloc_typecast(struct type_expr_t* tet, struct expr* exp)
++struct expr* expr_alloc_typecast(struct dbg_type* type, struct expr* exp)
+ {
+     struct expr*        ex;
+ 
+     ex = expr_alloc();
+ 
+     ex->type            = EXPR_TYPE_CAST;
+-    ex->un.cast.cast_to = *tet;
++    ex->un.cast.cast_to = *type;
+     ex->un.cast.expr    = exp;
+     return ex;
+ }
+@@ -272,7 +272,6 @@ struct expr* WINAPIV expr_alloc_func_call(const char* funcname, int nargs, ...)
+ struct dbg_lvalue expr_eval(struct expr* exp)
+ {
+     struct dbg_lvalue                   rtn;
+-    int		                        i;
+     struct dbg_lvalue                   exp1;
+     struct dbg_lvalue                   exp2;
+     DWORD64	                        scale1, scale2, scale3;
+@@ -285,52 +284,11 @@ struct dbg_lvalue expr_eval(struct expr* exp)
+     switch (exp->type)
+     {
+     case EXPR_TYPE_CAST:
+-        /* this is really brute force, we simply change the type... without 
++        /* this is really brute force, we simply change the type... without
+          * checking if this is right or not
+          */
+         rtn = expr_eval(exp->un.cast.expr);
+-        switch (exp->un.cast.cast_to.type)
+-        {
+-        case type_expr_type_id:
+-            if (exp->un.cast.cast_to.u.type.id == dbg_itype_none)
+-            {
+-                dbg_printf("Can't cast to unknown type\n");
+-                RaiseException(DEBUG_STATUS_BAD_TYPE, 0, 0, NULL);
+-            }
+-            rtn.type = exp->un.cast.cast_to.u.type;
+-            break;
+-        case type_expr_udt_class:
+-        case type_expr_udt_struct:
+-        case type_expr_udt_union:
+-            rtn.type = types_find_type(rtn.type.module, exp->un.cast.cast_to.u.name,
+-                                       SymTagUDT);
+-            if (rtn.type.id == dbg_itype_none)
+-            {
+-                dbg_printf("Can't cast to UDT %s\n", exp->un.cast.cast_to.u.name);
+-                RaiseException(DEBUG_STATUS_BAD_TYPE, 0, 0, NULL);
+-            }
+-            break;
+-        case type_expr_enumeration:
+-            rtn.type = types_find_type(rtn.type.module, exp->un.cast.cast_to.u.name,
+-                                       SymTagEnum);
+-            if (rtn.type.id == dbg_itype_none)
+-            {
+-                dbg_printf("Can't cast to enumeration %s\n", exp->un.cast.cast_to.u.name);
+-                RaiseException(DEBUG_STATUS_BAD_TYPE, 0, 0, NULL);
+-            }
+-            break;
+-        default:
+-            dbg_printf("Unsupported cast type %u\n", exp->un.cast.cast_to.type);
+-            RaiseException(DEBUG_STATUS_BAD_TYPE, 0, 0, NULL);
+-        }
+-        for (i = 0; i < exp->un.cast.cast_to.deref_count; i++)
+-        {
+-            if (!types_find_pointer(&rtn.type, &rtn.type))
+-            {
+-                dbg_printf("Cannot find pointer type\n");
+-                RaiseException(DEBUG_STATUS_BAD_TYPE, 0, 0, NULL);
+-            }
+-        }
++        rtn.type = exp->un.cast.cast_to;
+         break;
+     case EXPR_TYPE_STRING:
+         init_lvalue_in_debugger(&rtn, dbg_itype_astring, &exp->un.string.str);
+@@ -626,30 +584,13 @@ struct dbg_lvalue expr_eval(struct expr* exp)
+ BOOL expr_print(const struct expr* exp)
+ {
+     int		        i;
+-    struct dbg_type     type;
+ 
+     switch (exp->type)
+     {
+     case EXPR_TYPE_CAST:
+         WINE_FIXME("No longer supported (missing module base)\n");
+         dbg_printf("((");
+-        switch (exp->un.cast.cast_to.type)
+-        {
+-        case type_expr_type_id:
+-            type.module = 0;
+-            type.id = exp->un.cast.cast_to.type;
+-            types_print_type(&type, FALSE); break;
+-        case type_expr_udt_class:
+-            dbg_printf("class %s", exp->un.cast.cast_to.u.name); break;
+-        case type_expr_udt_struct:
+-            dbg_printf("struct %s", exp->un.cast.cast_to.u.name); break;
+-        case type_expr_udt_union:
+-            dbg_printf("union %s", exp->un.cast.cast_to.u.name); break;
+-        case type_expr_enumeration:
+-            dbg_printf("enum %s", exp->un.cast.cast_to.u.name); break;
+-        }
+-        for (i = 0; i < exp->un.cast.cast_to.deref_count; i++)
+-            dbg_printf("*");
++        types_print_type(&exp->un.cast.cast_to, FALSE);
+         dbg_printf(")");
+         expr_print(exp->un.cast.expr);
+         dbg_printf(")");
+diff --git a/programs/winedbg/types.c b/programs/winedbg/types.c
+index 5633201d2fe..af0fd8806c6 100644
+--- a/programs/winedbg/types.c
++++ b/programs/winedbg/types.c
+@@ -324,39 +324,6 @@ BOOL types_array_index(const struct dbg_lvalue* lvalue, int index, struct dbg_lv
+     return TRUE;
+ }
+ 
+-struct type_find_t
+-{
+-    ULONG               result; /* out: the found type */
+-    enum SymTagEnum     tag;    /* in: the tag to look for */
+-    union
+-    {
+-        ULONG                   typeid; /* when tag is SymTagUDT */
+-        const char*             name;   /* when tag is SymTagPointerType */
+-    } u;
+-};
+-
+-static BOOL CALLBACK types_cb(PSYMBOL_INFO sym, ULONG size, void* _user)
+-{
+-    struct type_find_t* user = _user;
+-    BOOL                ret = TRUE;
+-
+-    if (sym->Tag == user->tag)
+-    {
+-        switch (user->tag)
+-        {
+-        case SymTagUDT:
+-            if (!strcmp(user->u.name, sym->Name))
+-            {
+-                user->result = sym->TypeIndex;
+-                ret = FALSE;
+-            }
+-            break;
+-        default: break;
+-        }
+-    }
+-    return ret;
+-}
+-
+ /******************************************************************
+  *		types_find_pointer
+  *
+@@ -396,25 +363,65 @@ BOOL types_find_pointer(const struct dbg_type* type, struct dbg_type* ret)
+     return TRUE;
+ }
+ 
++struct type_find_type_t
++{
++    enum SymTagEnum     tag;    /* in: the tag to look for */
++    struct dbg_type     found;  /* out: the found type */
++    unsigned            count;  /* out: incremented at each different type */
++};
++
++static BOOL CALLBACK find_type_cb(PSYMBOL_INFO sym, ULONG size, void* _user)
++{
++    struct type_find_type_t* f = _user;
++    if (sym->Tag == f->tag)
++    {
++        if (f->found.id == dbg_itype_none)
++        {
++            f->found.module = sym->ModBase;
++            f->found.id = sym->TypeIndex;
++        }
++        else
++        {
++            /* potential conflict */
++            struct dbg_type alt;
++            BOOL equal;
++            alt.module = sym->ModBase;
++            alt.id = sym->TypeIndex;
++            if (!types_compare(f->found, alt, &equal) || !equal)
++                f->count++;
++        }
++    }
++    return TRUE;
++}
++
+ /******************************************************************
+  *		types_find_type
+  *
+- * Should look up in the module based at linear address whether a type
+- * named 'name' and with the correct tag exists
+  */
+-struct dbg_type types_find_type(DWORD64 linear, const char* name, enum SymTagEnum tag)
++BOOL types_find_type(const char* name, enum SymTagEnum tag, struct dbg_type* type)
+ 
+ {
+-    struct type_find_t  f;
+-    struct dbg_type     ret;
++    struct type_find_type_t f;
++    char* ptr;
+ 
+-    f.result = dbg_itype_none;
++    if (!strchr(name, '!'))
++    {
++        ptr = malloc(2 + strlen(name) + 1);
++        if (!ptr) return FALSE;
++        strcpy(ptr, "*!");
++        strcat(ptr, name);
++    }
++    else ptr = NULL;
+     f.tag = tag;
+-    f.u.name = name;
+-    SymEnumTypes(dbg_curr_process->handle, linear, types_cb, &f);
+-    ret.module = linear;
+-    ret.id = f.result;
+-    return ret;
++    f.found.id = dbg_itype_none;
++    f.count = 0;
++    SymEnumTypesByName(dbg_curr_process->handle, 0, ptr ? ptr : name, find_type_cb, &f);
++    free(ptr);
++    if (f.found.id == dbg_itype_none) return FALSE;
++    /* FIXME report different types (f.count != 0) */
++    *type = f.found;
++
++    return TRUE;
+ }
+ 
+ /***********************************************************************
+

@@ -1,0 +1,129 @@
+From: Eric Pouech <eric.pouech@gmail.com>
+Subject: [PATCH 4/5] dbghelp: now passing VARIANT as enumerations values from debug-info backends
+Message-Id: <163957153188.312873.16171998114594718056.stgit@euterpe>
+Date: Wed, 15 Dec 2021 13:32:11 +0100
+In-Reply-To: <163956392092.312873.414496354310104456.stgit@euterpe>
+References: <163956392092.312873.414496354310104456.stgit@euterpe>
+
+Signed-off-by: Eric Pouech <eric.pouech@gmail.com>
+
+---
+ dlls/dbghelp/dbghelp_private.h |    2 +-
+ dlls/dbghelp/dwarf.c           |    6 +++++-
+ dlls/dbghelp/msc.c             |   10 ++++++----
+ dlls/dbghelp/stabs.c           |    5 ++++-
+ dlls/dbghelp/type.c            |    5 ++---
+ 5 files changed, 18 insertions(+), 10 deletions(-)
+
+diff --git a/dlls/dbghelp/dbghelp_private.h b/dlls/dbghelp/dbghelp_private.h
+index 1e77ed49225..0af62f5b02e 100644
+--- a/dlls/dbghelp/dbghelp_private.h
++++ b/dlls/dbghelp/dbghelp_private.h
+@@ -916,7 +916,7 @@ extern struct symt_enum*
+                                   struct symt* basetype) DECLSPEC_HIDDEN;
+ extern BOOL         symt_add_enum_element(struct module* module, 
+                                           struct symt_enum* enum_type, 
+-                                          const char* name, int value) DECLSPEC_HIDDEN;
++                                          const char* name, const VARIANT* value) DECLSPEC_HIDDEN;
+ extern struct symt_array*
+                     symt_new_array(struct module* module, int min, DWORD count,
+                                    struct symt* base, struct symt* index) DECLSPEC_HIDDEN;
+diff --git a/dlls/dbghelp/dwarf.c b/dlls/dbghelp/dwarf.c
+index 7515e540778..12088f1c037 100644
+--- a/dlls/dbghelp/dwarf.c
++++ b/dlls/dbghelp/dwarf.c
+@@ -1836,12 +1836,16 @@ static void dwarf2_parse_enumerator(dwarf2_debug_info_t* di,
+ {
+     struct attribute    name;
+     struct attribute    value;
++    VARIANT             variant;
+ 
+     TRACE("%s\n", dwarf2_debug_di(di));
+ 
+     if (!dwarf2_find_attribute(di, DW_AT_name, &name)) return;
+     if (!dwarf2_find_attribute(di, DW_AT_const_value, &value)) value.u.svalue = 0;
+-    symt_add_enum_element(di->unit_ctx->module_ctx->module, parent, name.u.string, value.u.svalue);
++    /* FIXME: we could be cropping the value */
++    V_VT(&variant) = VT_I4;
++    V_I4(&variant) = value.u.svalue;
++    symt_add_enum_element(di->unit_ctx->module_ctx->module, parent, name.u.string, &variant);
+ 
+     if (dwarf2_get_di_children(di)) FIXME("Unsupported children\n");
+ }
+diff --git a/dlls/dbghelp/msc.c b/dlls/dbghelp/msc.c
+index 317f7bb84b5..aa212a65cbd 100644
+--- a/dlls/dbghelp/msc.c
++++ b/dlls/dbghelp/msc.c
+@@ -721,19 +721,21 @@ static BOOL codeview_add_type_enum_field_list(struct module* module,
+         {
+         case LF_ENUMERATE_V1:
+         {
+-            int value, vlen = numeric_leaf(&value, &type->enumerate_v1.value);
++            VARIANT value;
++            int vlen = leaf_as_variant(&value, &type->enumerate_v1.value);
+             const struct p_string* p_name = (const struct p_string*)((const unsigned char*)&type->enumerate_v1.value + vlen);
+ 
+-            symt_add_enum_element(module, symt, terminate_string(p_name), value);
++            symt_add_enum_element(module, symt, terminate_string(p_name), &value);
+             ptr += 2 + 2 + vlen + (1 + p_name->namelen);
+             break;
+         }
+         case LF_ENUMERATE_V3:
+         {
+-            int value, vlen = numeric_leaf(&value, &type->enumerate_v3.value);
++            VARIANT value;
++            int vlen = leaf_as_variant(&value, &type->enumerate_v3.value);
+             const char* name = (const char*)&type->enumerate_v3.value + vlen;
+ 
+-            symt_add_enum_element(module, symt, name, value);
++            symt_add_enum_element(module, symt, name, &value);
+             ptr += 2 + 2 + vlen + (1 + strlen(name));
+             break;
+         }
+diff --git a/dlls/dbghelp/stabs.c b/dlls/dbghelp/stabs.c
+index 931102c4fb3..e8584739018 100644
+--- a/dlls/dbghelp/stabs.c
++++ b/dlls/dbghelp/stabs.c
+@@ -723,14 +723,17 @@ static inline int stabs_pts_read_enum(struct ParseTypedefData* ptd,
+ {
+     LONG_PTR    value;
+     int		idx;
++    VARIANT     v;
+ 
++    V_VT(&v) = VT_I4;
+     while (*ptd->ptr != ';')
+     {
+ 	idx = ptd->idx;
+ 	PTS_ABORTIF(ptd, stabs_pts_read_id(ptd) == -1);
+ 	PTS_ABORTIF(ptd, stabs_pts_read_number(ptd, &value) == -1);
+ 	PTS_ABORTIF(ptd, *ptd->ptr++ != ',');
+-	symt_add_enum_element(ptd->module, edt, ptd->buf + idx, value);
++	V_I4(&v) = value;
++	symt_add_enum_element(ptd->module, edt, ptd->buf + idx, &v);
+ 	ptd->idx = idx;
+     }
+     ptd->ptr++;
+diff --git a/dlls/dbghelp/type.c b/dlls/dbghelp/type.c
+index 67f4265ddc9..b7b226d28e8 100644
+--- a/dlls/dbghelp/type.c
++++ b/dlls/dbghelp/type.c
+@@ -360,7 +360,7 @@ struct symt_enum* symt_new_enum(struct module* module, const char* typename,
+ }
+ 
+ BOOL symt_add_enum_element(struct module* module, struct symt_enum* enum_type,
+-                           const char* name, int value)
++                           const char* name, const VARIANT* value)
+ {
+     struct symt_data*   e;
+     struct symt**       p;
+@@ -375,8 +375,7 @@ BOOL symt_add_enum_element(struct module* module, struct symt_enum* enum_type,
+     e->kind = DataIsConstant;
+     e->container = &enum_type->symt;
+     e->type = enum_type->base_type;
+-    V_VT(&e->u.value) = VT_I4;
+-    V_I4(&e->u.value) = value;
++    e->u.value = *value;
+ 
+     p = vector_add(&enum_type->vchildren, &module->pool);
+     if (!p) return FALSE; /* FIXME we leak e */
+

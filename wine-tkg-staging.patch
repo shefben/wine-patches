@@ -1,0 +1,248 @@
+From 15b370fea1e2b03f0f226fb8bcdbe6e41003a6a4 Mon Sep 17 00:00:00 2001
+From: Tk-Glitch <ti3nou@gmail.com>
+Date: Sun, 12 May 2019 12:54:53 +0200
+Subject: No God, Please No! - staging
+Unless it's used to build pure mainline or staging, it's not proper for issue reporting
+
+#diff --git a/include/wine/server_protocol.h b/include/wine/server_protocol.h
+#index 1d17a40530f..ce26240bc9a 100644
+#--- a/include/wine/server_protocol.h
+#+++ b/include/wine/server_protocol.h
+#@@ -492,6 +492,7 @@ typedef union
+#         client_ptr_t     user;
+#         client_ptr_t     sb;
+#         data_size_t      result;
+#+        unsigned int     async_wait; 
+#     } async_io;
+#     struct
+#     {
+diff --git a/dlls/winex11.drv/x11drv.h b/dlls/winex11.drv/x11drv.h
+--- a/dlls/winex11.drv/x11drv.h
++++ b/dlls/winex11.drv/x11drv.h
+@ -643,6 +643,7 @@ struct x11drv_win_data
+     BOOL        use_alpha : 1;  /* does window use an alpha channel? */
+     BOOL        skip_taskbar : 1; /* does window should be deleted from taskbar */
+     BOOL        add_taskbar : 1; /* does window should be added to taskbar regardless of style */
++    DWORD       swp_flags;      /* last swp flags used for the window */
+     int         wm_state;       /* current value of the WM_STATE property */
+     DWORD       net_wm_state;   /* bit mask of active x11drv_net_wm_state values */
+     Window      embedder;       /* window id of embedder */
+diff --git a/dlls/mountmgr.sys/device.c b/dlls/mountmgr.sys/device.c 
+index 875bcd4..626b054 100755
+--- a/dlls/mountmgr.sys/device.c    
++++ b/dlls/mountmgr.sys/device.c
+@@ -1715,8 +1715,7 @@ static NTSTATUS WINAPI fill_volume_info( FS_INFORMATION_CLASS info_class, enum f
+             break;
+         default:
+             fsname = L"NTFS";
+-            info->FileSystemAttributes = FILE_CASE_PRESERVED_NAMES | FILE_PERSISTENT_ACLS
+-                                         | get_filesystem_flags( volume );
++            info->FileSystemAttributes = FILE_CASE_PRESERVED_NAMES | FILE_PERSISTENT_ACLS;
+             info->MaximumComponentNameLength = 255;
+             break;
+         }
+diff --git a/server/protocol.def b/server/protocol.def
+index 2ecef88..68bc27c 100755
+--- a/server/protocol.def  
++++ b/server/protocol.def
+@@ -508,6 +508,7 @@ typedef union
+         client_ptr_t     user;     /* user pointer */
+         client_ptr_t     sb;       /* status block */
+         data_size_t      result;   /* result size */
++       unsigned int     async_wait;
+     } async_io;
+     struct
+     {
+@@ -3731,6 +3731,12 @@ enum caret_state
+     obj_handle_t handle;       /* process handle */
+ @END
+ 
++@REQ(query_async_waiting)
++    obj_handle_t  handle;
++    int type;
++@REPLY
++    int state;
++@END
+ 
+ /* Resume a process */
+ @REQ(resume_process)
+@@ -3747,109 +3748,109 @@ enum caret_state
+     obj_handle_t handle;       /* next thread handle */
+ @END
+ 
+-enum esync_type
++enum fsync_type
+ {
+-    ESYNC_SEMAPHORE = 1,
+-    ESYNC_AUTO_EVENT,
+-    ESYNC_MANUAL_EVENT,
+-    ESYNC_MUTEX,
+-    ESYNC_AUTO_SERVER,
+-    ESYNC_MANUAL_SERVER,
+-    ESYNC_QUEUE,
++    FSYNC_SEMAPHORE = 1,
++    FSYNC_AUTO_EVENT,
++    FSYNC_MANUAL_EVENT,
++    FSYNC_MUTEX,
++    FSYNC_AUTO_SERVER,
++    FSYNC_MANUAL_SERVER,
++    FSYNC_QUEUE,
+ };
+ 
+-/* Create a new eventfd-based synchronization object */
+-@REQ(create_esync)
++/* Create a new futex-based synchronization object */
++@REQ(create_fsync)
+     unsigned int access;        /* wanted access rights */
+-    int          initval;       /* initial value */
+-    int          type;          /* type of esync object */
+-    int          max;           /* maximum count on a semaphore */
++    int low;                    /* initial value of low word */
++    int high;                   /* initial value of high word */
++    int type;                   /* type of fsync object */
+     VARARG(objattr,object_attributes); /* object attributes */
+ @REPLY
+     obj_handle_t handle;        /* handle to the object */
+-    int          type;          /* actual type (may be different for events) */
+-    unsigned int shm_idx;
++    int type;                   /* type of fsync object */
++    unsigned int shm_idx;       /* this object's index into the shm section */
+ @END
+ 
+-@REQ(open_esync)
++/* Open an fsync object */
++@REQ(open_fsync)
+     unsigned int access;        /* wanted access rights */
+     unsigned int attributes;    /* object attributes */
+     obj_handle_t rootdir;       /* root directory */
+-    int          type;          /* type of esync object (above) */
++    int          type;          /* type of fsync object */
+     VARARG(name,unicode_str);   /* object name */
+ @REPLY
+     obj_handle_t handle;        /* handle to the event */
+-    int          type;          /* type of esync object (above) */
++    int          type;          /* type of fsync object */
+     unsigned int shm_idx;       /* this object's index into the shm section */
+ @END
+ 
+-/* Retrieve the esync fd for an object. */
+-@REQ(get_esync_fd)
++/* Retrieve the shm index for an object. */
++@REQ(get_fsync_idx)
+     obj_handle_t handle;        /* handle to the object */
+ @REPLY
+     int          type;
+     unsigned int shm_idx;
+ @END
+ 
+-/* Notify the server that we are doing a message wait or done with one. */
+-@REQ(esync_msgwait)
++@REQ(fsync_msgwait)
+     int          in_msgwait;    /* are we in a message wait? */
+ @END
+ 
+-/* Retrieve the fd to wait on for user APCs. */
+-@REQ(get_esync_apc_fd)
++@REQ(get_fsync_apc_idx)
++@REPLY
++    unsigned int shm_idx;
+ @END
+ 
+-enum fsync_type
++enum esync_type
+ {
+-    FSYNC_SEMAPHORE = 1,
+-    FSYNC_AUTO_EVENT,
+-    FSYNC_MANUAL_EVENT,
+-    FSYNC_MUTEX,
+-    FSYNC_AUTO_SERVER,
+-    FSYNC_MANUAL_SERVER,
+-    FSYNC_QUEUE,
++    ESYNC_SEMAPHORE = 1,
++    ESYNC_AUTO_EVENT,
++    ESYNC_MANUAL_EVENT,
++    ESYNC_MUTEX,
++    ESYNC_AUTO_SERVER,
++    ESYNC_MANUAL_SERVER,
++    ESYNC_QUEUE,
+ };
+ 
+-/* Create a new futex-based synchronization object */
+-@REQ(create_fsync)
++/* Create a new eventfd-based synchronization object */
++@REQ(create_esync)
+     unsigned int access;        /* wanted access rights */
+-    int low;                    /* initial value of low word */
+-    int high;                   /* initial value of high word */
+-    int type;                   /* type of fsync object */
++    int          initval;       /* initial value */
++    int          type;          /* type of esync object */
++    int          max;           /* maximum count on a semaphore */
+     VARARG(objattr,object_attributes); /* object attributes */
+ @REPLY
+     obj_handle_t handle;        /* handle to the object */
+-    int type;                   /* type of fsync object */
+-    unsigned int shm_idx;       /* this object's index into the shm section */
++    int          type;          /* actual type (may be different for events) */
++    unsigned int shm_idx;
+ @END
+ 
+-/* Open an fsync object */
+-@REQ(open_fsync)
++@REQ(open_esync)
+     unsigned int access;        /* wanted access rights */
+     unsigned int attributes;    /* object attributes */
+     obj_handle_t rootdir;       /* root directory */
+-    int          type;          /* type of fsync object */
++    int          type;          /* type of esync object (above) */
+     VARARG(name,unicode_str);   /* object name */
+ @REPLY
+     obj_handle_t handle;        /* handle to the event */
+-    int          type;          /* type of fsync object */
++    int          type;          /* type of esync object (above) */
+     unsigned int shm_idx;       /* this object's index into the shm section */
+ @END
+ 
+-/* Retrieve the shm index for an object. */
+-@REQ(get_fsync_idx)
++/* Retrieve the esync fd for an object. */
++@REQ(get_esync_fd)
+     obj_handle_t handle;        /* handle to the object */
+ @REPLY
+     int          type;
+     unsigned int shm_idx;
+ @END
+ 
+-@REQ(fsync_msgwait)
++/* Notify the server that we are doing a message wait or done with one. */
++@REQ(esync_msgwait)
+     int          in_msgwait;    /* are we in a message wait? */
+ @END
+ 
+-@REQ(get_fsync_apc_idx)
+-@REPLY
+-    unsigned int shm_idx;
++/* Retrieve the fd to wait on for user APCs. */
++@REQ(get_esync_apc_fd)
+ @END
+diff --git a/dlls/ntdll/loader.c b/dlls/ntdll/loader.c
+index 20bc3f977d1..c2187a19397 100644
+--- a/dlls/ntdll/loader.c
++++ b/dlls/ntdll/loader.c
+@@ -3483,11 +3483,11 @@ void WINAPI LdrInitializeThunk( CONTEXT *context, ULONG_PTR unknown2, ULONG_PTR
+     InitializeObjectAttributes( &staging_event_attr, &staging_event_string, OBJ_OPENIF, NULL, NULL );
+     if (NtCreateEvent( &staging_event, EVENT_ALL_ACCESS, &staging_event_attr, NotificationEvent, FALSE ) == STATUS_SUCCESS)
+     {
+-        FIXME_(winediag)("wine-staging %s is a testing version containing experimental patches.\n", wine_get_version());
+-        FIXME_(winediag)("Please mention your exact version when filing bug reports on winehq.org.\n");
++        FIXME_(winediag)("Wine TkG (staging) %s is a testing version containing experimental patches.\n", wine_get_version());
++        FIXME_(winediag)("Please don't report bugs about it on winehq.org and use https://github.com/Frogging-Family/wine-tkg-git/issues instead.\n");
+     }
+     else
+-        WARN_(winediag)("wine-staging %s is a testing version containing experimental patches.\n", wine_get_version());
++        WARN_(winediag)("Wine TkG (staging) %s is a testing version containing experimental patches.\n", wine_get_version());
+ 
+     if (process_detaching) NtTerminateThread( GetCurrentThread(), 0 );
+ 
+ 
+

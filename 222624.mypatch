@@ -1,0 +1,38 @@
+From: "Rémi Bernon" <rbernon@codeweavers.com>
+Subject: [PATCH 3/5] user32: Remove FIXME from RegisterDeviceNotificationA.
+Message-Id: <20211224144913.927374-3-rbernon@codeweavers.com>
+Date: Fri, 24 Dec 2021 15:49:11 +0100
+In-Reply-To: <20211224144913.927374-1-rbernon@codeweavers.com>
+References: <20211224144913.927374-1-rbernon@codeweavers.com>
+
+There's no conversion to do, the device name in the filter is ignored.
+
+Signed-off-by: Rémi Bernon <rbernon@codeweavers.com>
+---
+ dlls/user32/input.c | 8 ++------
+ 1 file changed, 2 insertions(+), 6 deletions(-)
+
+diff --git a/dlls/user32/input.c b/dlls/user32/input.c
+index 5010fe93bd5..b6b20ce093d 100644
+--- a/dlls/user32/input.c
++++ b/dlls/user32/input.c
+@@ -1187,13 +1187,9 @@ extern BOOL WINAPI I_ScUnregisterDeviceNotification( HDEVNOTIFY handle );
+  *
+  * See RegisterDeviceNotificationW.
+  */
+-HDEVNOTIFY WINAPI RegisterDeviceNotificationA(HANDLE hRecipient, LPVOID pNotificationFilter, DWORD dwFlags)
++HDEVNOTIFY WINAPI RegisterDeviceNotificationA( HANDLE handle, void *filter, DWORD flags )
+ {
+-    TRACE("(hwnd=%p, filter=%p,flags=0x%08x)\n",
+-        hRecipient,pNotificationFilter,dwFlags);
+-    if (pNotificationFilter)
+-        FIXME("The notification filter will requires an A->W when filter support is implemented\n");
+-    return RegisterDeviceNotificationW(hRecipient, pNotificationFilter, dwFlags);
++    return RegisterDeviceNotificationW( handle, filter, flags );
+ }
+ 
+ /***********************************************************************
+
+-- 
+2.34.1
+

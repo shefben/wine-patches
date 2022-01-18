@@ -1,0 +1,196 @@
+From: Paul Gofman <pgofman@codeweavers.com>
+Subject: [PATCH 4/4] server: Ensure completion port wait object exists after successful wait.
+Message-Id: <20211207105917.311408-4-pgofman@codeweavers.com>
+Date: Tue,  7 Dec 2021 13:59:17 +0300
+In-Reply-To: <20211207105917.311408-1-pgofman@codeweavers.com>
+References: <20211207105917.311408-1-pgofman@codeweavers.com>
+
+Based on the problem analysis by Andrew Eikum.
+
+Signed-off-by: Paul Gofman <pgofman@codeweavers.com>
+---
+    Supersedes 220433-220435.
+
+    The added 'waited' request parameter is not needed for NtRemoveIoCompletion[Ex] logic
+    but the application may wait on completion port directly.
+
+ dlls/ntdll/unix/sync.c |  6 ++++++
+ server/completion.c    | 36 ++++++++++++++++++++++++++++++------
+ server/protocol.def    |  1 +
+ server/thread.c        |  2 ++
+ server/thread.h        |  1 +
+ 5 files changed, 40 insertions(+), 6 deletions(-)
+
+diff --git a/dlls/ntdll/unix/sync.c b/dlls/ntdll/unix/sync.c
+index d5d92145503..bc6a06726b0 100644
+--- a/dlls/ntdll/unix/sync.c
++++ b/dlls/ntdll/unix/sync.c
+@@ -1815,6 +1815,7 @@ NTSTATUS WINAPI NtRemoveIoCompletion( HANDLE handle, ULONG_PTR *key, ULONG_PTR *
+                                       IO_STATUS_BLOCK *io, LARGE_INTEGER *timeout )
+ {
+     NTSTATUS status;
++    int waited = 0;
+ 
+     TRACE( "(%p, %p, %p, %p, %p)\n", handle, key, value, io, timeout );
+ 
+@@ -1823,6 +1824,7 @@ NTSTATUS WINAPI NtRemoveIoCompletion( HANDLE handle, ULONG_PTR *key, ULONG_PTR *
+         SERVER_START_REQ( remove_completion )
+         {
+             req->handle = wine_server_obj_handle( handle );
++            req->waited = waited;
+             if (!(status = wine_server_call( req )))
+             {
+                 *key            = reply->ckey;
+@@ -1835,6 +1837,7 @@ NTSTATUS WINAPI NtRemoveIoCompletion( HANDLE handle, ULONG_PTR *key, ULONG_PTR *
+         if (status != STATUS_PENDING) return status;
+         status = NtWaitForSingleObject( handle, FALSE, timeout );
+         if (status != WAIT_OBJECT_0) return status;
++        waited = 1;
+     }
+ }
+ 
+@@ -1846,6 +1849,7 @@ NTSTATUS WINAPI NtRemoveIoCompletionEx( HANDLE handle, FILE_IO_COMPLETION_INFORM
+                                         ULONG *written, LARGE_INTEGER *timeout, BOOLEAN alertable )
+ {
+     NTSTATUS status;
++    int waited = 0;
+     ULONG i = 0;
+ 
+     TRACE( "%p %p %u %p %p %u\n", handle, info, count, written, timeout, alertable );
+@@ -1857,6 +1861,7 @@ NTSTATUS WINAPI NtRemoveIoCompletionEx( HANDLE handle, FILE_IO_COMPLETION_INFORM
+             SERVER_START_REQ( remove_completion )
+             {
+                 req->handle = wine_server_obj_handle( handle );
++                req->waited = waited;
+                 if (!(status = wine_server_call( req )))
+                 {
+                     info[i].CompletionKey             = reply->ckey;
+@@ -1876,6 +1881,7 @@ NTSTATUS WINAPI NtRemoveIoCompletionEx( HANDLE handle, FILE_IO_COMPLETION_INFORM
+         }
+         status = NtWaitForSingleObject( handle, alertable, timeout );
+         if (status != WAIT_OBJECT_0) break;
++        waited = 1;
+     }
+     *written = i ? i : 1;
+     return status;
+diff --git a/server/completion.c b/server/completion.c
+index 27a7f3e3e50..12948277d79 100644
+--- a/server/completion.c
++++ b/server/completion.c
+@@ -169,9 +169,16 @@ static int completion_wait_signaled( struct object *obj, struct wait_queue_entry
+ static void completion_wait_satisfied( struct object *obj, struct wait_queue_entry *entry )
+ {
+     struct completion_wait *wait = (struct completion_wait *)obj;
++    struct thread *thread;
+ 
+     assert( obj->ops == &completion_wait_ops );
+-    if (!wait->completion) make_wait_abandoned( entry );
++    if (wait->completion)
++    {
++        thread = get_wait_queue_thread( entry );
++        if (thread->locked_completion) release_object( thread->locked_completion );
++        thread->locked_completion = grab_object( obj );
++    }
++    else make_wait_abandoned( entry );
+ }
+ 
+ static void completion_dump( struct object *obj, int verbose )
+@@ -297,19 +304,36 @@ DECL_HANDLER(add_completion)
+ /* get completion from completion port */
+ DECL_HANDLER(remove_completion)
+ {
+-    struct completion* completion = get_completion_obj( current->process, req->handle, IO_COMPLETION_MODIFY_STATE );
++    struct completion* completion;
++    struct completion_wait *wait;
+     struct list *entry;
+     struct comp_msg *msg;
+ 
+-    if (!completion) return;
++    if (req->waited && (wait = (struct completion_wait *)current->locked_completion))
++        current->locked_completion = NULL;
++    else
++    {
++        if (current->locked_completion)
++        {
++            release_object( current->locked_completion );
++            current->locked_completion = NULL;
++        }
++        completion = get_completion_obj( current->process, req->handle, IO_COMPLETION_MODIFY_STATE );
++        if (!completion) return;
++
++        wait = (struct completion_wait *)grab_object( completion->wait );
++        release_object( completion );
++    }
+ 
+-    entry = list_head( &completion->wait->queue );
++    assert( wait->obj.ops == &completion_wait_ops );
++
++    entry = list_head( &wait->queue );
+     if (!entry)
+         set_error( STATUS_PENDING );
+     else
+     {
+         list_remove( entry );
+-        completion->wait->depth--;
++        wait->depth--;
+         msg = LIST_ENTRY( entry, struct comp_msg, queue_entry );
+         reply->ckey = msg->ckey;
+         reply->cvalue = msg->cvalue;
+@@ -318,7 +342,7 @@ DECL_HANDLER(remove_completion)
+         free( msg );
+     }
+ 
+-    release_object( completion );
++    release_object( wait );
+ }
+ 
+ /* get queue depth for completion port */
+diff --git a/server/protocol.def b/server/protocol.def
+index efe0d22cbc4..d2c42d595f7 100644
+--- a/server/protocol.def
++++ b/server/protocol.def
+@@ -3501,6 +3501,7 @@ struct handle_info
+ /* get completion from completion port queue */
+ @REQ(remove_completion)
+     obj_handle_t handle;          /* port handle */
++    int          waited;          /* port was just successfully waited on */
+ @REPLY
+     apc_param_t   ckey;           /* completion key */
+     apc_param_t   cvalue;         /* completion value */
+diff --git a/server/thread.c b/server/thread.c
+index e9240a05659..146bf0e1bae 100644
+--- a/server/thread.c
++++ b/server/thread.c
+@@ -250,6 +250,7 @@ static inline void init_thread_structure( struct thread *thread )
+ 
+     thread->creation_time = current_time;
+     thread->exit_time     = 0;
++    thread->locked_completion = NULL;
+ 
+     list_init( &thread->mutex_list );
+     list_init( &thread->system_apc );
+@@ -560,7 +560,7 @@ static void destroy_thread( struct object *obj )
+     if (thread->exit_poll) remove_timeout_user( thread->exit_poll );
+     if (thread->id) free_ptid( thread->id );
+     if (thread->token) release_object( thread->token );
+-
++    if (thread->locked_completion) release_object( thread->locked_completion );
+     if (do_esync())
+         close( thread->esync_fd );
+ }
+
+diff --git a/server/thread.h b/server/thread.h
+index 8dcf966a90a..e9442b59d9a 100644
+--- a/server/thread.h
++++ b/server/thread.h
+@@ -96,6 +96,7 @@ struct thread
+     data_size_t            desc_len;      /* thread description length in bytes */
+     WCHAR                 *desc;          /* thread description string */
+     struct timeout_user   *exit_poll;     /* poll if the thread/process has exited already */
++    struct object         *locked_completion; /* completion port wait object successfully waited by the thread */
+ };
+ 
+ extern struct thread *current;
+-- 
+2.33.1
+
