@@ -1,0 +1,51 @@
+From: Fabian Maurer <dark.shadow4@web.de>
+Subject: [PATCH 2/2] shell32: Fix regression preventing explorer to open control panel applets
+Message-Id: <20220116181116.312266-2-dark.shadow4@web.de>
+Date: Sun, 16 Jan 2022 19:11:16 +0100
+In-Reply-To: <20220116181116.312266-1-dark.shadow4@web.de>
+References: <20220116181116.312266-1-dark.shadow4@web.de>
+
+Wine-Bug: https://bugs.winehq.org/show_bug.cgi?id=52394
+Signed-off-by: Fabian Maurer <dark.shadow4@web.de>
+---
+ dlls/shell32/shlfolder.c | 6 ++++--
+ 1 file changed, 4 insertions(+), 2 deletions(-)
+
+diff --git a/dlls/shell32/shlfolder.c b/dlls/shell32/shlfolder.c
+index 8e3b561cfd1..28d067075ca 100644
+--- a/dlls/shell32/shlfolder.c
++++ b/dlls/shell32/shlfolder.c
+@@ -381,6 +381,7 @@ HRESULT SHELL32_GetItemAttributes (IShellFolder2 *psf, LPCITEMIDLIST pidl, LPDWO
+ {
+     DWORD dwAttributes;
+     BOOL has_guid;
++    PIDLDATA* data;
+     static const DWORD dwSupportedAttr=
+                           SFGAO_CANCOPY |           /*0x00000001 */
+                           SFGAO_CANMOVE |           /*0x00000002 */
+@@ -406,6 +407,7 @@ HRESULT SHELL32_GetItemAttributes (IShellFolder2 *psf, LPCITEMIDLIST pidl, LPDWO
+     }
+
+     has_guid = _ILGetGUIDPointer(pidl) != NULL;
++    data = _ILGetDataPointer (pidl);
+
+     dwAttributes = *pdwAttributes;
+
+@@ -414,10 +416,10 @@ HRESULT SHELL32_GetItemAttributes (IShellFolder2 *psf, LPCITEMIDLIST pidl, LPDWO
+ 	    SFGAO_DROPTARGET|SFGAO_HASPROPSHEET|SFGAO_CANLINK;
+     } else if (has_guid && _ILIsPidlSimple(pidl) && HCR_GetFolderAttributes(pidl, &dwAttributes)) {
+ 	*pdwAttributes = dwAttributes;
+-    } else if (_ILGetDataPointer (pidl)) {
++    } else if (data) {
+ 	DWORD file_attr = _ILGetFileAttributes (pidl, NULL, 0);
+
+-        if (!file_attr) {
++        if (!file_attr && data->type != PT_CPLAPPLET) {
+ 	    WCHAR path[MAX_PATH];
+ 	    STRRET strret;
+
+--
+2.34.1
+
+
+

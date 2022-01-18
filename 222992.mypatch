@@ -1,0 +1,43 @@
+From: Eric Pouech <eric.pouech@gmail.com>
+Subject: [PATCH] programs/cmd: detect badly quoted operand in 'if' statement
+Message-Id: <164140265047.117506.9729841659290572475.stgit@euterpe>
+Date: Wed,  5 Jan 2022 18:10:51 +0100
+
+Wine-Bug: https://bugs.winehq.org/show_bug.cgi?id=52345
+Signed-off-by: Eric Pouech <eric.pouech@gmail.com>
+
+---
+ programs/cmd/builtins.c |   10 ++++++++++
+ 1 file changed, 10 insertions(+)
+
+diff --git a/programs/cmd/builtins.c b/programs/cmd/builtins.c
+index 6966a4229b3..60bf3194a15 100644
+--- a/programs/cmd/builtins.c
++++ b/programs/cmd/builtins.c
+@@ -2713,6 +2713,12 @@ void WCMD_popd (void) {
+     LocalFree (temp);
+ }
+ 
++/* check that operand is either unquoted, or with opening and ending quotes */
++static BOOL is_properly_quoted(const WCHAR* str)
++{
++    return str[0] != '"' || (str[1] && str[wcslen(str) - 1] == '"');
++}
++
+ /*******************************************************************
+  * evaluate_if_comparison
+  *
+@@ -2738,8 +2744,12 @@ static int evaluate_if_comparison(const WCHAR *leftOperand, const WCHAR *operato
+ 
+     /* == is a special case, as it always compares strings */
+     if (!lstrcmpiW(operator, L"=="))
++    {
++        if (!is_properly_quoted(leftOperand) || !is_properly_quoted(rightOperand))
++            return -1;
+         return caseInsensitive ? lstrcmpiW(leftOperand, rightOperand) == 0
+                                : lstrcmpW (leftOperand, rightOperand) == 0;
++    }
+ 
+     /* Check if we have plain integers (in decimal, octal or hexadecimal notation) */
+     leftOperand_int = wcstol(leftOperand, &endptr_leftOp, 0);
+

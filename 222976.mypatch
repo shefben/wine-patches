@@ -1,0 +1,29 @@
+From: Eric Pouech <eric.pouech@gmail.com>
+Subject: [PATCH 2/4] programs/cmd: handle read errors in WCMD_ask_confirm
+Message-Id: <164139453225.97654.12684144363190984637.stgit@euterpe>
+Date: Wed,  5 Jan 2022 15:55:32 +0100
+In-Reply-To: <164139305597.97654.10505773825898841193.stgit@euterpe>
+References: <164139305597.97654.10505773825898841193.stgit@euterpe>
+
+Signed-off-by: Eric Pouech <eric.pouech@gmail.com>
+
+---
+ programs/cmd/builtins.c |    4 +++-
+ 1 file changed, 3 insertions(+), 1 deletion(-)
+
+diff --git a/programs/cmd/builtins.c b/programs/cmd/builtins.c
+index d14e69e072a..91e4453a4e7 100644
+--- a/programs/cmd/builtins.c
++++ b/programs/cmd/builtins.c
+@@ -193,7 +193,9 @@ static BOOL WCMD_ask_confirm (const WCHAR *message, BOOL showSureText,
+       if (showSureText)
+         WCMD_output_asis (confirm);
+       WCMD_output_asis (options);
+-      WCMD_ReadFile(GetStdHandle(STD_INPUT_HANDLE), answer, ARRAY_SIZE(answer), &count);
++      if (!WCMD_ReadFile(GetStdHandle(STD_INPUT_HANDLE), answer, ARRAY_SIZE(answer), &count))
++        return FALSE;
++      if (!count) continue;
+       answer[0] = towupper(answer[0]);
+       if (answer[0] == Ybuffer[0])
+         return TRUE;
+

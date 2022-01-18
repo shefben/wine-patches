@@ -1,0 +1,109 @@
+From: Eric Pouech <eric.pouech@gmail.com>
+Subject: [PATCH 4/4] programs/cmd: don't overflow internal path buffers
+Message-Id: <164139454392.97654.42124213016641858.stgit@euterpe>
+Date: Wed,  5 Jan 2022 15:55:43 +0100
+In-Reply-To: <164139305597.97654.10505773825898841193.stgit@euterpe>
+References: <164139305597.97654.10505773825898841193.stgit@euterpe>
+
+this can happen with symbolic links
+
+Signed-off-by: Eric Pouech <eric.pouech@gmail.com>
+
+---
+ programs/cmd/builtins.c  |   21 +++++++++++++++------
+ programs/cmd/directory.c |    1 +
+ 2 files changed, 16 insertions(+), 6 deletions(-)
+
+diff --git a/programs/cmd/builtins.c b/programs/cmd/builtins.c
+index 91e4453a4e7..6966a4229b3 100644
+--- a/programs/cmd/builtins.c
++++ b/programs/cmd/builtins.c
+@@ -1256,12 +1256,14 @@ static BOOL WCMD_delete_one (const WCHAR *thisArg) {
+     {
+       WCHAR modifiedParm[MAX_PATH];
+ 
+-      lstrcpyW(modifiedParm, argCopy);
+-      lstrcatW(modifiedParm, L"\\*");
+-      FindClose(hff);
+-      found = TRUE;
+-      WCMD_delete_one(modifiedParm);
+-
++      if (wcslen(argCopy) + 2 + 1 <= ARRAY_SIZE(modifiedParm))
++      {
++        lstrcpyW(modifiedParm, argCopy);
++        lstrcatW(modifiedParm, L"\\*");
++        FindClose(hff);
++        found = TRUE;
++        WCMD_delete_one(modifiedParm);
++      }
+     } else if (handleParm) {
+ 
+       /* Build the filename to delete as <supplied directory>\<findfirst filename> */
+@@ -1269,6 +1271,7 @@ static BOOL WCMD_delete_one (const WCHAR *thisArg) {
+       do {
+         p = wcsrchr (fpath, '\\');
+         if (p != NULL) {
++          if ((p + 1 - fpath) + wcslen(fd.cFileName) + 1 > ARRAY_SIZE(fpath)) continue;
+           *++p = '\0';
+           lstrcatW (fpath, fd.cFileName);
+         }
+@@ -1324,6 +1327,7 @@ static BOOL WCMD_delete_one (const WCHAR *thisArg) {
+       GetFullPathNameW(argCopy, ARRAY_SIZE(thisDir), thisDir, NULL);
+       _wsplitpath(thisDir, drive, dir, fname, ext);
+ 
++      if (wcslen(drive) + wcslen(dir) + 1 + 1 > ARRAY_SIZE(thisDir)) return found;
+       lstrcpyW(thisDir, drive);
+       lstrcatW(thisDir, dir);
+       cPos = lstrlenW(thisDir);
+@@ -1350,6 +1354,7 @@ static BOOL WCMD_delete_one (const WCHAR *thisArg) {
+             DIRECTORY_STACK *nextDir;
+             WCHAR subParm[MAX_PATH];
+ 
++            if (wcslen(thisDir) + wcslen(fd.cFileName) + 1 + wcslen(fname) + wcslen(ext) + 1 > ARRAY_SIZE(subParm)) continue;
+             /* Work out search parameter in sub dir */
+             lstrcpyW (subParm, thisDir);
+             lstrcatW (subParm, fd.cFileName);
+@@ -1746,6 +1751,7 @@ static void WCMD_add_dirstowalk(DIRECTORY_STACK *dirsToWalk) {
+ 
+   /* Build a generic search and add all directories on the list of directories
+      still to walk                                                             */
++  if (wcslen(dirsToWalk->dirName) + 2 + 1 > ARRAY_SIZE(fullitem)) return;
+   lstrcpyW(fullitem, dirsToWalk->dirName);
+   lstrcatW(fullitem, L"\\*");
+   hff = FindFirstFileW(fullitem, &fd);
+@@ -2316,12 +2322,14 @@ void WCMD_for (WCHAR *p, CMD_LIST **cmdList) {
+                       WINE_TRACE("Processing FOR filename %s\n", wine_dbgstr_w(fd.cFileName));
+ 
+                       if (doRecurse) {
++                          if (wcslen(dirsToWalk->dirName) + 1 + wcslen(fd.cFileName) + 1 > ARRAY_SIZE(fullitem)) continue;
+                           lstrcpyW(fullitem, dirsToWalk->dirName);
+                           lstrcatW(fullitem, L"\\");
+                           lstrcatW(fullitem, fd.cFileName);
+                       } else {
+                           if (prefixlen) lstrcpynW(fullitem, item, prefixlen + 1);
+                           fullitem[prefixlen] = 0x00;
++                          if (wcslen(fullitem) + wcslen(fd.cFileName) + 1 > ARRAY_SIZE(fullitem)) continue;
+                           lstrcatW(fullitem, fd.cFileName);
+                       }
+                       doExecuted = TRUE;
+@@ -2964,6 +2972,7 @@ void WCMD_move (void)
+     attribs = GetFileAttributesW(output);
+     if (attribs != INVALID_FILE_ATTRIBUTES &&
+        (attribs & FILE_ATTRIBUTE_DIRECTORY)) {
++      if (wcslen(output) + 1 + wcslen(fd.cFileName) + 1 > ARRAY_SIZE(dest)) continue;
+       lstrcpyW(dest, output);
+       lstrcatW(dest, L"\\");
+       lstrcatW(dest, fd.cFileName);
+diff --git a/programs/cmd/directory.c b/programs/cmd/directory.c
+index 24b18bfa81b..3eba2c3e4fc 100644
+--- a/programs/cmd/directory.c
++++ b/programs/cmd/directory.c
+@@ -480,6 +480,7 @@ static DIRECTORY_STACK *WCMD_list_directory (DIRECTORY_STACK *inputparms, int le
+           while (dirsToCopy > 0) {
+             dirsToCopy--;
+ 
++            if (wcslen(inputparms->dirName) + wcslen(finddata.cFileName) + 1 + 1 > ARRAY_SIZE(string)) continue;
+             /* Work out search parameter in sub dir */
+             lstrcpyW (string, inputparms->dirName);
+             lstrcatW (string, finddata.cFileName);
+

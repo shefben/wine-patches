@@ -1,0 +1,134 @@
+From: "Rémi Bernon" <rbernon@codeweavers.com>
+Subject: [PATCH v2] urlmon: Always report available data before stop_binding.
+Message-Id: <20220104203110.3742655-1-rbernon@codeweavers.com>
+Date: Tue,  4 Jan 2022 21:31:10 +0100
+
+The HTML launcher of several Rebellion games (all probably based on the
+same code) use a custom protocol handler which calls ReportResult in
+LockRequest, causing an invalid memory access when OnDataAvailable
+callback is called, as the binding has already been stopped and
+terminated.
+
+Wine-Bug: https://bugs.winehq.org/show_bug.cgi?id=46213
+Wine-Bug: https://bugs.winehq.org/show_bug.cgi?id=52286
+Signed-off-by: Rémi Bernon <rbernon@codeweavers.com>
+---
+
+v2: Use an even more ad-hoc flag to detect LockRequest calls during
+    ReportData.
+
+ dlls/mshtml/tests/htmldoc.c | 18 +++++++++++++++++-
+ dlls/urlmon/binding.c       | 23 +++++++++++++++++++++++
+ 2 files changed, 40 insertions(+), 1 deletion(-)
+
+diff --git a/dlls/mshtml/tests/htmldoc.c b/dlls/mshtml/tests/htmldoc.c
+index 89311c5d8c8..f8df7d7736d 100644
+--- a/dlls/mshtml/tests/htmldoc.c
++++ b/dlls/mshtml/tests/htmldoc.c
+@@ -522,6 +522,8 @@ static const IDispatchVtbl ExternalVtbl = {
+ 
+ static IDispatch External = { &ExternalVtbl };
+ 
++static IInternetProtocolSink *protocol_sink;
++
+ static HRESULT WINAPI Protocol_QueryInterface(IInternetProtocol *iface, REFIID riid, void **ppv)
+ {
+     if(IsEqualGUID(&IID_IUnknown, riid) || IsEqualGUID(&IID_IInternetProtocol, riid)) {
+@@ -556,6 +558,8 @@ static HRESULT WINAPI Protocol_Start(IInternetProtocol *iface, LPCWSTR szUrl,
+ 
+     CHECK_EXPECT(Start);
+ 
++    protocol_sink = pOIProtSink;
++
+     ok(pOIProtSink != NULL, "pOIProtSink == NULL\n");
+     ok(pOIBindInfo != NULL, "pOIBindInfo == NULL\n");
+     ok(!grfPI, "grfPI = %x\n", grfPI);
+@@ -619,7 +623,9 @@ static HRESULT WINAPI Protocol_Start(IInternetProtocol *iface, LPCWSTR szUrl,
+     ok(hres == S_OK, "ReportData failed: %08x\n", hres);
+ 
+     hres = IInternetProtocolSink_ReportResult(pOIProtSink, S_OK, 0, NULL);
+-    ok(hres == S_OK, "ReportResult failed: %08x\n", hres);
++    ok(hres == E_FAIL, "ReportResult failed: %08x\n", hres);
++
++    protocol_sink = NULL;
+ 
+     return S_OK;
+ }
+@@ -689,7 +695,17 @@ static HRESULT WINAPI Protocol_Seek(IInternetProtocol *iface,
+ 
+ static HRESULT WINAPI Protocol_LockRequest(IInternetProtocol *iface, DWORD dwOptions)
+ {
++    HRESULT hres;
++
+     CHECK_EXPECT(LockRequest);
++
++    if(protocol_sink) {
++        hres = IInternetProtocolSink_ReportResult(protocol_sink, S_OK, 0, NULL);
++        ok(hres == S_OK, "ReportResult failed: %08x\n", hres);
++        ok(!called_UnlockRequest, "unexpected UnlockRequest\n");
++        ok(!called_Terminate, "unexpected Terminate\n");
++    }
++
+     return S_OK;
+ }
+ 
+diff --git a/dlls/urlmon/binding.c b/dlls/urlmon/binding.c
+index a74970033b3..56c479d6d2f 100644
+--- a/dlls/urlmon/binding.c
++++ b/dlls/urlmon/binding.c
+@@ -64,6 +64,8 @@ typedef enum {
+ #define BINDING_STOPPED   0x0002
+ #define BINDING_OBJAVAIL  0x0004
+ #define BINDING_ABORTED   0x0008
++#define BINDING_LOCKING   0x0010
++#define BINDING_TERMINATE 0x0020
+ 
+ typedef struct {
+     IBinding              IBinding_iface;
+@@ -1126,7 +1128,9 @@ static void report_data(Binding *This, DWORD bscf, ULONG progress, ULONG progres
+         HRESULT hres;
+ 
+         if(!(This->state & BINDING_LOCKED)) {
++            This->state |= BINDING_LOCKING;
+             hres = IInternetProtocolEx_LockRequest(&This->protocol->IInternetProtocolEx_iface, 0);
++            This->state &= ~BINDING_LOCKING;
+             if(SUCCEEDED(hres))
+                 This->state |= BINDING_LOCKED;
+         }
+@@ -1142,6 +1146,13 @@ static void report_data(Binding *This, DWORD bscf, ULONG progress, ULONG progres
+ 
+         hres = IBindStatusCallback_OnDataAvailable(This->callback, bscf, progress,
+                 &formatetc, &stgmed);
++
++        if(This->state & BINDING_TERMINATE) {
++            stop_binding(This, This->hres, NULL);
++            IInternetProtocolEx_Terminate(&This->protocol->IInternetProtocolEx_iface, 0);
++            return;
++        }
++
+         if(hres != S_OK) {
+             if(This->download_state != END_DOWNLOAD) {
+                 This->download_state = END_DOWNLOAD;
+@@ -1177,6 +1188,18 @@ static HRESULT WINAPI InternetProtocolSink_ReportResult(IInternetProtocolSink *i
+ 
+     TRACE("(%p)->(%08x %d %s)\n", This, hrResult, dwError, debugstr_w(szResult));
+ 
++    /* Make sure we don't call stop_binding before available data has been reported,
++       as some custom protocol handlers (in Zombie Army Trilogy launcher and similar)
++       call ReportResult within LockRequest, in report_data, before OnDataAvailable
++       has been called. Stopping or terminating the binding there causes an invalid
++       memory access later.
++    */
++    if(This->state & BINDING_LOCKING) {
++        This->hres = hrResult;
++        This->state |= BINDING_TERMINATE;
++        return S_OK;
++    }
++
+     stop_binding(This, hrResult, szResult);
+ 
+     IInternetProtocolEx_Terminate(&This->protocol->IInternetProtocolEx_iface, 0);
+
+-- 
+2.34.1
+

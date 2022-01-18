@@ -1,0 +1,117 @@
+diff --git a/dlls/msvcrt/file.c b/dlls/msvcrt/file.c
+index 2b0395d..3c10d07
+--- a/dlls/msvcrt/file.c
++++ b/dlls/msvcrt/file.c
+@@ -1369,7 +1369,7 @@ int CDECL _locking(int fd, int mode, __msvcrt_long nbytes)
+     return -1;
+   }
+ 
+-  TRACE(":fd (%d) by 0x%08Ix mode %s\n",
++  TRACE(":fd (%d) by 0x%08ldx mode %s\n",
+         fd,nbytes,(mode==_LK_UNLCK)?"_LK_UNLCK":
+         (mode==_LK_LOCK)?"_LK_LOCK":
+         (mode==_LK_NBLCK)?"_LK_NBLCK":
+diff --git a/dlls/msvcrt/except_x86_64.c b/dlls/msvcrt/except_x86_64.c
+index 7cbffc0..7aac220
+--- a/dlls/msvcrt/except_x86_64.c
++++ b/dlls/msvcrt/except_x86_64.c
+@@ -558,7 +558,7 @@ static DWORD cxx_frame_handler(EXCEPTION_RECORD *rec, ULONG64 frame,
+                     TRACE("nested exception detected\n");
+                     unwindlevel = tryblock->end_level;
+                     orig_frame = *(ULONG64*)rva_to_ptr(catchblock->frame, frame);
+-                    TRACE("setting orig_frame to %lx\n", orig_frame);
++                    TRACE("setting orig_frame to %llux\n", orig_frame);
+                 }
+             }
+         }
+@@ -591,7 +591,7 @@ static DWORD cxx_frame_handler(EXCEPTION_RECORD *rec, ULONG64 frame,
+ 
+         if (TRACE_ON(seh))
+         {
+-            TRACE("handling C++ exception rec %p frame %lx descr %p\n", rec, frame,  descr);
++            TRACE("handling C++ exception rec %p frame %llux descr %p\n", rec, frame,  descr);
+             dump_exception_type(exc_type, rec->ExceptionInformation[3]);
+             dump_function_descr(descr, dispatch->ImageBase);
+         }
+@@ -601,7 +601,7 @@ static DWORD cxx_frame_handler(EXCEPTION_RECORD *rec, ULONG64 frame,
+         thread_data_t *data = msvcrt_get_thread_data();
+ 
+         exc_type = NULL;
+-        TRACE("handling C exception code %x rec %p frame %lx descr %p\n",
++        TRACE("handling C exception code %x rec %p frame %llux descr %p\n",
+                 rec->ExceptionCode, rec, frame, descr);
+ 
+         if (data->se_translator) {
+@@ -647,7 +647,7 @@ int CDECL __CxxExceptionFilter( PEXCEPTION_POINTERS ptrs,
+ EXCEPTION_DISPOSITION CDECL __CxxFrameHandler( EXCEPTION_RECORD *rec, ULONG64 frame,
+                                                CONTEXT *context, DISPATCHER_CONTEXT *dispatch )
+ {
+-    TRACE( "%p %lx %p %p\n", rec, frame, context, dispatch );
++    TRACE( "%p %llux %p %p\n", rec, frame, context, dispatch );
+     return cxx_frame_handler( rec, frame, context, dispatch,
+             rva_to_ptr(*(UINT*)dispatch->HandlerData, dispatch->ImageBase) );
+ }
+diff --git a/dlls/mssign32/mssign32_main.c b/dlls/mssign32/mssign32_main.c
+index c76d467..bb19d36 100755
+--- a/dlls/mssign32/mssign32_main.c 
++++ b/dlls/mssign32/mssign32_main.c
+@@ -55,7 +55,7 @@ BOOL WINAPI PvkPrivateKeyAcquireContextFromMemory(LPCWSTR pwszProvName, DWORD dw
+ void WINAPI PvkFreeCryptProv(HCRYPTPROV hProv, LPCWSTR pwszCapiProvider, DWORD dwProviderType,
+                     LPWSTR pwszTmpContainer)
+ {
+-    FIXME("%08lx %s %d %s stub\n", hProv, debugstr_w(pwszCapiProvider), dwProviderType,
++    FIXME("%08llux %s %d %s stub\n", hProv, debugstr_w(pwszCapiProvider), dwProviderType,
+                     debugstr_w(pwszTmpContainer));
+ }
+diff --git a/dlls/msgsm32.acm/msgsm32.c b/dlls/msgsm32.acm/msgsm32.c
+index 8362413..c48286e 100755
+--- a/dlls/msgsm32.acm/msgsm32.c    
++++ b/dlls/msgsm32.acm/msgsm32.c
+@@ -503,7 +503,7 @@ static LRESULT GSM_StreamConvert(PACMDRVSTREAMINSTANCE adsi, PACMDRVSTREAMHEADER
+ LRESULT CALLBACK GSM_DriverProc(DWORD_PTR dwDevID, HDRVR hDriv, UINT wMsg,
+                                         LPARAM dwParam1, LPARAM dwParam2)
+ {
+-    TRACE("(%08lx %p %04x %08lx %08lx);\n",
++    TRACE("(%08lx %p %04x %08lldx %08lldx);\n",
+           dwDevID, hDriv, wMsg, dwParam1, dwParam2);
+ 
+     switch (wMsg)
+diff --git a/dlls/msadp32.acm/msadp32.c b/dlls/msadp32.acm/msadp32.c
+index 8b83f69..31fb132 100755
+--- a/dlls/msadp32.acm/msadp32.c    
++++ b/dlls/msadp32.acm/msadp32.c
+@@ -782,7 +782,7 @@ static LRESULT ADPCM_StreamConvert(PACMDRVSTREAMINSTANCE adsi, PACMDRVSTREAMHEAD
+ LRESULT CALLBACK ADPCM_DriverProc(DWORD_PTR dwDevID, HDRVR hDriv, UINT wMsg,
+                                         LPARAM dwParam1, LPARAM dwParam2)
+ {
+-    TRACE("(%08lx %p %04x %08lx %08lx);\n",
++    TRACE("(%08lx %p %04x %08lldx %08lldx);\n",
+           dwDevID, hDriv, wMsg, dwParam1, dwParam2);
+ 
+     switch (wMsg)
+diff --git a/dlls/msg711.acm/msg711.c b/dlls/msg711.acm/msg711.c
+index 7478bfd..0915f64 100755
+--- a/dlls/msg711.acm/msg711.c      
++++ b/dlls/msg711.acm/msg711.c
+@@ -1074,7 +1074,7 @@ static LRESULT G711_StreamConvert(PACMDRVSTREAMINSTANCE adsi, PACMDRVSTREAMHEADE
+ LRESULT CALLBACK G711_DriverProc(DWORD_PTR dwDevID, HDRVR hDriv, UINT wMsg,
+                                         LPARAM dwParam1, LPARAM dwParam2)
+ {
+-    TRACE("(%08lx %p %04x %08lx %08lx);\n",
++    TRACE("(%08lx %p %04x %08lldx %08lldx);\n",
+           dwDevID, hDriv, wMsg, dwParam1, dwParam2);
+ 
+     switch (wMsg)
+diff --git a/dlls/mscms/stub.c b/dlls/mscms/stub.c
+index 28c08e2..5925c06 100755
+--- a/dlls/mscms/stub.c     
++++ b/dlls/mscms/stub.c
+@@ -35,7 +35,7 @@ BOOL WINAPI CheckBitmapBits( HTRANSFORM transform, PVOID srcbits, BMFORMAT forma
+                              DWORD height, DWORD stride, PBYTE result, PBMCALLBACKFN callback,
+                              LPARAM data )
+ {
+-    FIXME( "( %p, %p, 0x%08x, 0x%08x, 0x%08x, 0x%08x, %p, %p, 0x%08lx ) stub\n",
++    FIXME( "( %p, %p, 0x%08x, 0x%08x, 0x%08x, 0x%08x, %p, %p, 0x%08lldx ) stub\n",
+            transform, srcbits, format, width, height, stride, result, callback, data );
+ 
+     return FALSE;

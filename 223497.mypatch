@@ -1,0 +1,31 @@
+From: Fabian Maurer <dark.shadow4@web.de>
+Subject: [PATCH 1/2] shell32: Only call HCR_GetFolderAttributes with simple pidls
+Message-Id: <20220116181116.312266-1-dark.shadow4@web.de>
+Date: Sun, 16 Jan 2022 19:11:15 +0100
+
+The function returns false with not-simple pidls anyways.
+This fixes an "ERR" message when opening a control panel applet from explorer
+
+Signed-off-by: Fabian Maurer <dark.shadow4@web.de>
+---
+ dlls/shell32/shlfolder.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/dlls/shell32/shlfolder.c b/dlls/shell32/shlfolder.c
+index 10aafc160c0..8e3b561cfd1 100644
+--- a/dlls/shell32/shlfolder.c
++++ b/dlls/shell32/shlfolder.c
+@@ -412,7 +412,7 @@ HRESULT SHELL32_GetItemAttributes (IShellFolder2 *psf, LPCITEMIDLIST pidl, LPDWO
+     if (_ILIsDrive (pidl)) {
+         *pdwAttributes &= SFGAO_HASSUBFOLDER|SFGAO_FILESYSTEM|SFGAO_FOLDER|SFGAO_FILESYSANCESTOR|
+ 	    SFGAO_DROPTARGET|SFGAO_HASPROPSHEET|SFGAO_CANLINK;
+-    } else if (has_guid && HCR_GetFolderAttributes(pidl, &dwAttributes)) {
++    } else if (has_guid && _ILIsPidlSimple(pidl) && HCR_GetFolderAttributes(pidl, &dwAttributes)) {
+ 	*pdwAttributes = dwAttributes;
+     } else if (_ILGetDataPointer (pidl)) {
+ 	DWORD file_attr = _ILGetFileAttributes (pidl, NULL, 0);
+--
+2.34.1
+
+
+

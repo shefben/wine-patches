@@ -1,0 +1,42 @@
+From: "Gabriel Ivăncescu" <gabrielopcode@gmail.com>
+Subject: [PATCH] mshtml: Fix leak on failure in return_nsstr.
+Message-Id: <17c96f00e87066ab8f9bec323d28ea94716d5310.1641570199.git.gabrielopcode@gmail.com>
+Date: Fri,  7 Jan 2022 17:43:44 +0200
+
+Signed-off-by: Gabriel Ivăncescu <gabrielopcode@gmail.com>
+---
+ dlls/mshtml/nsembed.c | 5 +++--
+ 1 file changed, 3 insertions(+), 2 deletions(-)
+
+diff --git a/dlls/mshtml/nsembed.c b/dlls/mshtml/nsembed.c
+index 25ad92d..32ae792 100644
+--- a/dlls/mshtml/nsembed.c
++++ b/dlls/mshtml/nsembed.c
+@@ -917,6 +917,7 @@ HRESULT map_nsresult(nsresult nsres)
+ HRESULT return_nsstr(nsresult nsres, nsAString *nsstr, BSTR *p)
+ {
+     const PRUnichar *str;
++    HRESULT hres = S_OK;
+ 
+     if(NS_FAILED(nsres)) {
+         WARN("failed: %08x\n", nsres);
+@@ -929,13 +930,13 @@ HRESULT return_nsstr(nsresult nsres, nsAString *nsstr, BSTR *p)
+     if(*str) {
+         *p = SysAllocString(str);
+         if(!*p)
+-            return E_OUTOFMEMORY;
++            hres = E_OUTOFMEMORY;
+     }else {
+         *p = NULL;
+     }
+ 
+     nsAString_Finish(nsstr);
+-    return S_OK;
++    return hres;
+ }
+ 
+ HRESULT return_nsstr_variant(nsresult nsres, nsAString *nsstr, unsigned flags, VARIANT *p)
+
+-- 
+2.34.1
+

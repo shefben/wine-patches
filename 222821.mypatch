@@ -1,0 +1,28 @@
+From: Alex Henrie <alexhenrie24@gmail.com>
+Subject: [PATCH] include: Add SL_ERROR_RETURNED
+Message-Id: <20220103072827.1000179-1-alexhenrie24@gmail.com>
+Date: Mon,  3 Jan 2022 00:28:27 -0700
+
+Signed-off-by: Alex Henrie <alexhenrie24@gmail.com>
+---
+I noticed that this was missing while investigating a testbot failure.
+---
+ include/ddk/wdm.h | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/include/ddk/wdm.h b/include/ddk/wdm.h
+index b798d339561..d00acf5b782 100644
+--- a/include/ddk/wdm.h
++++ b/include/ddk/wdm.h
+@@ -961,6 +961,7 @@ typedef NTSTATUS (WINAPI *PIO_COMPLETION_ROUTINE)(
+   IN PVOID  Context);
+ 
+ #define SL_PENDING_RETURNED             0x01
++#define SL_ERROR_RETURNED               0x02
+ #define SL_INVOKE_ON_CANCEL             0x20
+ #define SL_INVOKE_ON_SUCCESS            0x40
+ #define SL_INVOKE_ON_ERROR              0x80
+
+-- 
+2.34.1
+

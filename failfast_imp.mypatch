@@ -1,0 +1,87 @@
+From d2d912798927c30824d68dfb8be6c262c3f2d09c Mon Sep 17 00:00:00 2001
+From: André Hentschel <nerv@dawncrow.de>
+Date: Sat, 20 Feb 2021 08:51:17 +0100
+Subject: [PATCH] kernel32: Implement RaiseFailFastException
+
+---
+ dlls/kernel32/kernel32.spec     |  2 +-
+ dlls/kernelbase/debug.c         | 36 +++++++++++++++++++++++++++++++++
+ dlls/kernelbase/kernelbase.spec |  2 +-
+ 3 files changed, 38 insertions(+), 2 deletions(-)
+
+diff --git a/dlls/kernel32/kernel32.spec b/dlls/kernel32/kernel32.spec
+index ee2e3f8a..dd5636f1 100644
+--- a/dlls/kernel32/kernel32.spec
++++ b/dlls/kernel32/kernel32.spec
+@@ -1192,7 +1192,7 @@
+ @ stdcall -import QueueUserAPC(ptr long long)
+ @ stdcall -import QueueUserWorkItem(ptr ptr long)
+ @ stdcall -import RaiseException(long long long ptr)
+-# @ stub RaiseFailFastException
++@ stdcall -import RaiseFailFastException(ptr ptr long)
+ @ stdcall -import ReadConsoleA(long ptr long ptr ptr)
+ @ stdcall -import ReadConsoleInputA(long ptr long ptr)
+ @ stub ReadConsoleInputExA
+diff --git a/dlls/kernelbase/debug.c b/dlls/kernelbase/debug.c
+index cbc53e22..1608bf86 100644
+--- a/dlls/kernelbase/debug.c
++++ b/dlls/kernelbase/debug.c
+@@ -614,6 +614,42 @@ static BOOL check_resource_write( void *addr )
+ }
+ 
+ 
++/*******************************************************************
++ *         RaiseFailFastException   (kernelbase.@)
++ */
++void WINAPI RaiseFailFastException(EXCEPTION_RECORD *record, CONTEXT *context, DWORD flags)
++{
++    EXCEPTION_RECORD rec;
++    CONTEXT ctx;
++
++    if (!context)
++    {
++        ctx.ContextFlags = CONTEXT_FULL;
++        NtGetContextThread(GetCurrentThread(), &ctx);
++        context = &ctx;
++    }
++
++    if (!record)
++    {
++        rec.ExceptionCode    = STATUS_FAIL_FAST_EXCEPTION;
++        rec.ExceptionFlags   = 0;
++        rec.ExceptionRecord  = NULL;
++        rec.ExceptionAddress = RaiseFailFastException;
++        rec.NumberParameters = 0;
++        record = &rec;
++    }
++
++    if (!NtCurrentTeb()->Peb->BeingDebugged)
++    {
++        EXCEPTION_POINTERS epointers;
++
++        epointers.ExceptionRecord = record;
++        epointers.ContextRecord = context;
++        start_debugger_atomic(&epointers);
++    }
++}
++
++
+ /*******************************************************************
+  *         UnhandledExceptionFilter   (kernelbase.@)
+  */
+diff --git a/dlls/kernelbase/kernelbase.spec b/dlls/kernelbase/kernelbase.spec
+index 543961d2..32495d85 100644
+--- a/dlls/kernelbase/kernelbase.spec
++++ b/dlls/kernelbase/kernelbase.spec
+@@ -1235,7 +1235,7 @@
+ # @ stub QuirkIsEnabledForPackage4
+ # @ stub QuirkIsEnabledForProcess
+ @ stdcall RaiseException(long long long ptr)
+-# @ stub RaiseFailFastException
++@ stdcall RaiseFailFastException(ptr ptr long)
+ @ stdcall ReOpenFile(ptr long long long)
+ @ stdcall ReadConsoleA(long ptr long ptr ptr)
+ @ stdcall ReadConsoleInputA(long ptr long ptr)
+-- 
+2.30.1
+

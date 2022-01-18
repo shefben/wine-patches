@@ -1,0 +1,70 @@
+From: Eric Pouech <eric.pouech@gmail.com>
+Subject: [PATCH 3/4] programs/attrib: don't overflow internal path buffers
+Message-Id: <164139453807.97654.17401019914907736367.stgit@euterpe>
+Date: Wed,  5 Jan 2022 15:55:38 +0100
+In-Reply-To: <164139305597.97654.10505773825898841193.stgit@euterpe>
+References: <164139305597.97654.10505773825898841193.stgit@euterpe>
+
+this happens in recursive mode with symlinks
+
+Signed-off-by: Eric Pouech <eric.pouech@gmail.com>
+
+---
+ programs/attrib/attrib.c |   10 ++++++----
+ 1 file changed, 6 insertions(+), 4 deletions(-)
+
+diff --git a/programs/attrib/attrib.c b/programs/attrib/attrib.c
+index f8257461fe2..77789fb760e 100644
+--- a/programs/attrib/attrib.c
++++ b/programs/attrib/attrib.c
+@@ -149,6 +149,7 @@ static BOOL ATTRIB_processdirectory(const WCHAR *rootdir, const WCHAR *filespec,
+ 
+     if (recurse) {
+ 
++      if (wcslen(rootdir) + 1 + 1 > ARRAY_SIZE(buffer)) return FALSE;
+       /* Build spec to search for */
+       lstrcpyW(buffer, rootdir);
+       lstrcatW(buffer, L"*");
+@@ -163,6 +164,7 @@ static BOOL ATTRIB_processdirectory(const WCHAR *rootdir, const WCHAR *filespec,
+                   !lstrcmpW(fd.cFileName, L".") || !lstrcmpW(fd.cFileName, L".."))
+                   continue;
+ 
++              if (wcslen(rootdir) + wcslen(fd.cFileName) + 1 + 1 > ARRAY_SIZE(buffer)) continue;
+               /* Build new root dir to go searching in */
+               lstrcpyW(buffer, rootdir);
+               lstrcatW(buffer, fd.cFileName);
+@@ -175,6 +177,7 @@ static BOOL ATTRIB_processdirectory(const WCHAR *rootdir, const WCHAR *filespec,
+       FindClose (hff);
+     }
+ 
++    if (wcslen(rootdir) + wcslen(filespec) + 1 > ARRAY_SIZE(buffer)) return FALSE;
+     /* Build spec to search for */
+     lstrcpyW(buffer, rootdir);
+     lstrcatW(buffer, filespec);
+@@ -193,13 +196,14 @@ static BOOL ATTRIB_processdirectory(const WCHAR *rootdir, const WCHAR *filespec,
+             if (!includedirs && (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY))
+               continue;
+ 
++            if (wcslen(rootdir) + wcslen(fd.cFileName) + 1 > ARRAY_SIZE(buffer)) continue;
++            lstrcpyW(buffer, rootdir);
++            lstrcatW(buffer, fd.cFileName);
+             if (attrib_set || attrib_clear) {
+                 fd.dwFileAttributes &= ~attrib_clear;
+                 fd.dwFileAttributes |= attrib_set;
+                 if (!fd.dwFileAttributes)
+                     fd.dwFileAttributes |= FILE_ATTRIBUTE_NORMAL;
+-                lstrcpyW(buffer, rootdir);
+-                lstrcatW(buffer, fd.cFileName);
+                 SetFileAttributesW(buffer, fd.dwFileAttributes);
+                 found = TRUE;
+             } else {
+@@ -221,8 +225,6 @@ static BOOL ATTRIB_processdirectory(const WCHAR *rootdir, const WCHAR *filespec,
+                 if (fd.dwFileAttributes & FILE_ATTRIBUTE_COMPRESSED) {
+                     flags[7] = 'C';
+                 }
+-                lstrcpyW(buffer, rootdir);
+-                lstrcatW(buffer, fd.cFileName);
+                 ATTRIB_wprintf(L"%1     %2\n", flags, buffer);
+                 for (count = 0; count < (ARRAY_SIZE(flags) - 1); count++) flags[count] = ' ';
+                 found = TRUE;
+

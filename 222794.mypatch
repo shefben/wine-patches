@@ -1,0 +1,38 @@
+From: Ethan Searl <internetethansearl@gmail.com>
+Subject: [PATCH] winex11.drv: Call XRaiseWindow during WM_TAKE_FOCUS handler.
+Message-Id: <20211230194349.137988-1-internetethansearl@gmail.com>
+Date: Thu, 30 Dec 2021 14:43:49 -0500
+
+In the case where the original hwnd rejects the focus and we search for something else, raise the window because it may not be on top. This prevents showing modal windows on top of non-modal.
+Wine-Bug: https://bugs.winehq.org/show_bug.cgi?id=26503
+Signed-off-by: Ethan Searl <internetethansearl@gmail.com>
+---
+ dlls/winex11.drv/event.c | 11 ++++++++++-
+ 1 file changed, 10 insertions(+), 1 deletion(-)
+
+diff --git a/dlls/winex11.drv/event.c b/dlls/winex11.drv/event.c
+index 170111e9c28..183efe17d3a 100644
+--- a/dlls/winex11.drv/event.c
++++ b/dlls/winex11.drv/event.c
+@@ -722,7 +722,16 @@ static void handle_wm_protocols( HWND hwnd, XClientMessageEvent *event )
+         if (hwnd) hwnd = GetAncestor( hwnd, GA_ROOT );
+         if (!hwnd) hwnd = GetActiveWindow();
+         if (!hwnd) hwnd = last_focus;
+-        if (hwnd && can_activate_window(hwnd)) set_focus( event->display, hwnd, event_time );
++        if (hwnd && can_activate_window(hwnd))
++        {
++            Window win = X11DRV_get_whole_window(hwnd);
++            if (win)
++            {
++                TRACE("will raise window %p", hwnd);
++                XRaiseWindow(event->display, win);
++            }
++            set_focus( event->display, hwnd, event_time );
++        }
+     }
+     else if (protocol == x11drv_atom(_NET_WM_PING))
+     {
+
+-- 
+2.27.0
+

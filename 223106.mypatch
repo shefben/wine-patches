@@ -1,0 +1,51 @@
+From: Tom Ritter <tom@ritter.vg>
+Subject: [PATCH] Fix the widl extension that tries dllname.tlb if dllname.dll cannot be found
+Message-Id: <CA+cU71nxgL3wL+yBK-2WSQ_7-ypk41+GJbzhqiY_b8BWHPW0ig@mail.gmail.com>
+Date: Fri, 7 Jan 2022 11:26:05 -0500
+
+From f477feadb673ade3f4e561be31414d7dd33c217c Mon Sep 17 00:00:00 2001
+From: Tom Ritter <tom@ritter.vg>
+Date: Fri, 7 Jan 2022 11:24:46 -0500
+Subject: [PATCH] Fix the widl extension that tries dllname.tlb if dllname.dll
+ cannot be found
+
+Two issues were present:
+1) open_typelib stopped returning an error and started aborting on error
+2) The new code for the extension added .tlb to the end and stopped
+   removing the existing .dll extension, resulting in a search for
+   dllname.dll.tlb
+---
+ tools/widl/typelib.c | 2 +-
+ tools/widl/widl.c    | 2 +-
+ 2 files changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/tools/widl/typelib.c b/tools/widl/typelib.c
+index d47e937d70c..f2e723ef350 100644
+--- a/tools/widl/typelib.c
++++ b/tools/widl/typelib.c
+@@ -358,7 +358,7 @@ static void read_importlib(importlib_t *importlib)
+ 
+     /* widl extension: if importlib name has no .tlb extension, try using .tlb */
+     if (fd < 0 && !strendswith( importlib->name, ".tlb" ))
+-        fd = open_typelib( strmake( "%s.tlb", importlib->name ));
++        fd = open_typelib( replace_extension(importlib->name, "dll", "tlb") );
+ 
+     if(fd < 0)
+         error("Could not find importlib %s.\n", importlib->name);
+diff --git a/tools/widl/widl.c b/tools/widl/widl.c
+index f696a73bd2f..81ea159e4ab 100644
+--- a/tools/widl/widl.c
++++ b/tools/widl/widl.c
+@@ -709,7 +709,7 @@ int open_typelib( const char *name )
+             TRYOPEN( strmake( "%s%s/%s", default_dirs[i], pe_dir, name ));
+         }
+     }
+-    error( "cannot find %s\n", name );
++    return -1;
+ #undef TRYOPEN
+ }
+ 
+
+-- 
+2.25.1
+

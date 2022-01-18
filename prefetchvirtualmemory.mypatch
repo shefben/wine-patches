@@ -1,0 +1,34 @@
+From: Jinoh Kang <jinoh.kang.kr@gmail.com>
+Subject: [PATCH v6 6/6] kernelbase: Implement PrefetchVirtualMemory.
+Message-Id: <7fd968a3-d777-7789-f6c4-10d7eac13783@gmail.com>
+Date: Fri, 3 Dec 2021 23:37:19 +0900
+In-Reply-To: <a6221984-7278-3a24-4908-b77a4149bd6b@gmail.com>
+References: <a6221984-7278-3a24-4908-b77a4149bd6b@gmail.com>
+
+Signed-off-by: Jinoh Kang <jinoh.kang.kr@gmail.com>
+---
+
+diff --git a/dlls/kernelbase/memory.c b/dlls/kernelbase/memory.c
+index 7844b571e51..9dd396fc273 100644
+--- a/dlls/kernelbase/memory.c
++++ b/dlls/kernelbase/memory.c
+@@ -346,11 +346,12 @@ LPVOID WINAPI DECLSPEC_HOTPATCH VirtualAllocFromApp( void *addr, SIZE_T size,
+ /***********************************************************************
+  *             PrefetchVirtualMemory   (kernelbase.@)
+  */
+-BOOL WINAPI /* DECLSPEC_HOTPATCH */ PrefetchVirtualMemory( HANDLE process, ULONG_PTR count,
+-                                                           WIN32_MEMORY_RANGE_ENTRY *addresses, ULONG flags )
++BOOL WINAPI DECLSPEC_HOTPATCH PrefetchVirtualMemory( HANDLE process, ULONG_PTR count,
++                                                     WIN32_MEMORY_RANGE_ENTRY *addresses, ULONG flags )
+ {
+-    FIXME( "process %p, count %p, addresses %p, flags %#x stub.\n", process, (void *)count, addresses, flags );
+-    return TRUE;
++    return set_ntstatus( NtSetInformationVirtualMemory( process, VmPrefetchInformation,
++                                                        count, (PMEMORY_RANGE_ENTRY)addresses,
++                                                        &flags, sizeof(flags) ));
+ }
+ 
+ 
+
+-- 
+2.31.1

@@ -1,0 +1,29 @@
+From: "André Zwing" <nerv@dawncrow.de>
+Subject: [PATCH 6/7] shell32: Fix PathCleanupSpec spec file entry
+Message-Id: <20220107201654.504763-6-nerv@dawncrow.de>
+Date: Fri,  7 Jan 2022 21:16:53 +0100
+In-Reply-To: <20220107201654.504763-1-nerv@dawncrow.de>
+References: <20220107201654.504763-1-nerv@dawncrow.de>
+
+Signed-off-by: André Zwing <nerv@dawncrow.de>
+---
+ dlls/shell32/shell32.spec | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/dlls/shell32/shell32.spec b/dlls/shell32/shell32.spec
+index f8bf8f246e8..8fd6f50b067 100644
+--- a/dlls/shell32/shell32.spec
++++ b/dlls/shell32/shell32.spec
+@@ -160,7 +160,7 @@
+  168 stdcall -ordinal SHCreatePropSheetExtArray(long wstr long)
+  169 stdcall -ordinal SHDestroyPropSheetExtArray(long)
+  170 stdcall -ordinal SHReplaceFromPropSheetExtArray(long long ptr long)
+- 171 stdcall -ordinal PathCleanupSpec(ptr ptr)
++ 171 stdcall -ordinal PathCleanupSpec(wstr ptr)
+  172 stdcall -noname SHCreateLinks(long str ptr long ptr)
+  173 stdcall -ordinal SHValidateUNC(long wstr long)
+  174 stdcall -ordinal SHCreateShellFolderViewEx(ptr ptr)
+
+-- 
+2.25.1
+

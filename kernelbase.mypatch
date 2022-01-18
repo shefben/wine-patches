@@ -1,0 +1,159 @@
+diff --git a/dlls/kernelbase/locale.c b/dlls/kernelbase/locale.c
+--- a/dlls/kernelbase/locale.c      
++++ b/dlls/kernelbase/locale.c
+@@ -3970,7 +3970,7 @@ INT WINAPI DECLSPEC_HOTPATCH FindNLSStringEx( const WCHAR *locale, DWORD flags,
+     DWORD mask = flags;
+     int offset, inc, count;
+ 
+-    TRACE( "%s %x %s %d %s %d %p %p %p %ld\n", wine_dbgstr_w(locale), flags,
++    TRACE( "%s %x %s %d %s %d %p %p %p %lld\n", wine_dbgstr_w(locale), flags,
+            wine_dbgstr_w(src), srclen, wine_dbgstr_w(value), valuelen, found,
+            version, reserved, handle );
+ 
+@@ -5669,7 +5669,7 @@ INT WINAPI DECLSPEC_HOTPATCH LCMapStringEx( const WCHAR *locale, DWORD flags, co
+     if (handle)
+     {
+         static int once;
+-        if (!once++) FIXME( "unsupported lparam %lx\n", handle );
++        if (!once++) FIXME( "unsupported lparam %lldx\n", handle );
+     }
+ 
+     if (!src || !srclen || dstlen < 0)
+diff --git a/dlls/kernelbase/sync.c b/dlls/kernelbase/sync.c
+--- a/dlls/kernelbase/sync.c        
++++ b/dlls/kernelbase/sync.c
+@@ -1016,7 +1016,7 @@ HANDLE WINAPI DECLSPEC_HOTPATCH CreateIoCompletionPort( HANDLE handle, HANDLE po
+     IO_STATUS_BLOCK iosb;
+     HANDLE ret = port;
+ 
+-    TRACE( "(%p, %p, %08lx, %08x)\n", handle, port, key, threads );
++    TRACE( "(%p, %p, %08llux, %08x)\n", handle, port, key, threads );
+ 
+     if (!port)
+     {
+@@ -1102,7 +1102,7 @@ BOOL WINAPI DECLSPEC_HOTPATCH GetQueuedCompletionStatusEx( HANDLE port, OVERLAPP
+ BOOL WINAPI DECLSPEC_HOTPATCH PostQueuedCompletionStatus( HANDLE port, DWORD count,
+                                                           ULONG_PTR key, LPOVERLAPPED overlapped )
+ {
+-    TRACE( "%p %d %08lx %p\n", port, count, key, overlapped );
++    TRACE( "%p %d %08llux %p\n", port, count, key, overlapped );
+ 
+     return set_ntstatus( NtSetIoCompletion( port, key, (ULONG_PTR)overlapped, STATUS_SUCCESS, count ));
+ }
+diff --git a/dlls/kernelbase/process.c b/dlls/kernelbase/process.c
+--- a/dlls/kernelbase/process.c     
++++ b/dlls/kernelbase/process.c
+@@ -960,7 +960,7 @@ DWORD WINAPI DECLSPEC_HOTPATCH GetProcessId( HANDLE process )
+ BOOL WINAPI /* DECLSPEC_HOTPATCH */ GetProcessMitigationPolicy( HANDLE process, PROCESS_MITIGATION_POLICY policy,
+                                                           void *buffer, SIZE_T length )
+ {
+-    FIXME( "(%p, %u, %p, %lu): stub\n", process, policy, buffer, length );
++    FIXME( "(%p, %u, %p, %llu): stub\n", process, policy, buffer, length );
+     return TRUE;
+ }
+ 
+@@ -1257,7 +1257,7 @@ BOOL WINAPI DECLSPEC_HOTPATCH SetProcessGroupAffinity( HANDLE process, const GRO
+ BOOL WINAPI /* DECLSPEC_HOTPATCH */ SetProcessMitigationPolicy( PROCESS_MITIGATION_POLICY policy,
+                                                           void *buffer, SIZE_T length )
+ {
+-    FIXME( "(%d, %p, %lu): stub\n", policy, buffer, length );
++    FIXME( "(%d, %p, %llu): stub\n", policy, buffer, length );
+     return TRUE;
+ }
+ 
+@@ -1781,7 +1781,7 @@ BOOL WINAPI DECLSPEC_HOTPATCH UpdateProcThreadAttribute( struct _PROC_THREAD_ATT
+     DWORD mask;
+     struct proc_thread_attr *entry;
+ 
+-    TRACE( "(%p %x %08lx %p %ld %p %p)\n", list, flags, attr, value, size, prev_ret, size_ret );
++    TRACE( "(%p %x %08llux %p %llu %p %p)\n", list, flags, attr, value, size, prev_ret, size_ret );
+ 
+     if (list->count >= list->size)
+     {
+@@ -1849,7 +1849,7 @@ BOOL WINAPI DECLSPEC_HOTPATCH UpdateProcThreadAttribute( struct _PROC_THREAD_ATT
+ 
+     default:
+         SetLastError( ERROR_NOT_SUPPORTED );
+-        FIXME( "Unhandled attribute %lu\n", attr & PROC_THREAD_ATTRIBUTE_NUMBER );
++        FIXME( "Unhandled attribute %llu\n", attr & PROC_THREAD_ATTRIBUTE_NUMBER );
+         return FALSE;
+     }
+
+diff --git a/dlls/kernelbase/memory.c b/dlls/kernelbase/memory.c
+--- a/dlls/kernelbase/memory.c      
++++ b/dlls/kernelbase/memory.c
+@@ -260,7 +260,7 @@ UINT WINAPI DECLSPEC_HOTPATCH ResetWriteWatch( void *base, SIZE_T size )
+  */
+ BOOL WINAPI DECLSPEC_HOTPATCH SetSystemFileCacheSize( SIZE_T mincache, SIZE_T maxcache, DWORD flags )
+ {
+-    FIXME( "stub: %ld %ld %d\n", mincache, maxcache, flags );
++    FIXME( "stub: %llu %llu %d\n", mincache, maxcache, flags );
+     SetLastError( ERROR_CALL_NOT_IMPLEMENTED );
+     return FALSE;
+ }
+@@ -1102,7 +1102,7 @@ BOOL WINAPI DECLSPEC_HOTPATCH GlobalMemoryStatusEx( MEMORYSTATUSEX *status )
+  */
+ BOOL WINAPI DECLSPEC_HOTPATCH MapUserPhysicalPages( void *addr, ULONG_PTR page_count, ULONG_PTR *pages )
+ {
+-    FIXME( "stub: %p %lu %p\n", addr, page_count, pages );
++    FIXME( "stub: %p %llu %p\n", addr, page_count, pages );
+     *pages = 0;
+     SetLastError( ERROR_CALL_NOT_IMPLEMENTED );
+     return FALSE;
+diff --git a/dlls/kernelbase/loader.c b/dlls/kernelbase/loader.c
+--- a/dlls/kernelbase/loader.c      
++++ b/dlls/kernelbase/loader.c
+@@ -644,7 +644,7 @@ BOOL WINAPI DECLSPEC_HOTPATCH EnumResourceLanguagesExA( HMODULE module, LPCSTR t
+     const IMAGE_RESOURCE_DIRECTORY *basedir, *resdir;
+     const IMAGE_RESOURCE_DIRECTORY_ENTRY *et;
+ 
+-    TRACE( "%p %s %s %p %lx %x %d\n", module, debugstr_a(type), debugstr_a(name),
++    TRACE( "%p %s %s %p %lldx %x %d\n", module, debugstr_a(type), debugstr_a(name),
+            func, param, flags, lang );
+ 
+     if (flags & (RESOURCE_ENUM_MUI | RESOURCE_ENUM_MUI_SYSTEM | RESOURCE_ENUM_VALIDATE))
+@@ -704,7 +704,7 @@ BOOL WINAPI DECLSPEC_HOTPATCH EnumResourceLanguagesExW( HMODULE module, LPCWSTR
+     const IMAGE_RESOURCE_DIRECTORY *basedir, *resdir;
+     const IMAGE_RESOURCE_DIRECTORY_ENTRY *et;
+ 
+-    TRACE( "%p %s %s %p %lx %x %d\n", module, debugstr_w(type), debugstr_w(name),
++    TRACE( "%p %s %s %p %lldx %x %d\n", module, debugstr_w(type), debugstr_w(name),
+            func, param, flags, lang );
+ 
+     if (flags & (RESOURCE_ENUM_MUI | RESOURCE_ENUM_MUI_SYSTEM | RESOURCE_ENUM_VALIDATE))
+@@ -766,7 +766,7 @@ BOOL WINAPI DECLSPEC_HOTPATCH EnumResourceNamesExA( HMODULE module, LPCSTR type,
+     const IMAGE_RESOURCE_DIRECTORY_ENTRY *et;
+     const IMAGE_RESOURCE_DIR_STRING_U *str;
+ 
+-    TRACE( "%p %s %p %lx\n", module, debugstr_a(type), func, param );
++    TRACE( "%p %s %p %lldx\n", module, debugstr_a(type), func, param );
+ 
+     if (flags & (RESOURCE_ENUM_MUI | RESOURCE_ENUM_MUI_SYSTEM | RESOURCE_ENUM_VALIDATE))
+         FIXME( "unimplemented flags: %x\n", flags );
+@@ -845,7 +845,7 @@ BOOL WINAPI DECLSPEC_HOTPATCH EnumResourceNamesExW( HMODULE module, LPCWSTR type
+     const IMAGE_RESOURCE_DIRECTORY_ENTRY *et;
+     const IMAGE_RESOURCE_DIR_STRING_U *str;
+ 
+-    TRACE( "%p %s %p %lx\n", module, debugstr_w(type), func, param );
++    TRACE( "%p %s %p %lldx\n", module, debugstr_w(type), func, param );
+ 
+     if (flags & (RESOURCE_ENUM_MUI | RESOURCE_ENUM_MUI_SYSTEM | RESOURCE_ENUM_VALIDATE))
+         FIXME( "unimplemented flags: %x\n", flags );
+@@ -930,7 +930,7 @@ BOOL WINAPI DECLSPEC_HOTPATCH EnumResourceTypesExA( HMODULE module, ENUMRESTYPEP
+     const IMAGE_RESOURCE_DIRECTORY_ENTRY *et;
+     const IMAGE_RESOURCE_DIR_STRING_U *str;
+ 
+-    TRACE( "%p %p %lx\n", module, func, param );
++    TRACE( "%p %p %lldx\n", module, func, param );
+ 
+     if (flags & (RESOURCE_ENUM_MUI | RESOURCE_ENUM_MUI_SYSTEM | RESOURCE_ENUM_VALIDATE))
+         FIXME( "unimplemented flags: %x\n", flags );
+@@ -983,7 +983,7 @@ BOOL WINAPI DECLSPEC_HOTPATCH EnumResourceTypesExW( HMODULE module, ENUMRESTYPEP
+     const IMAGE_RESOURCE_DIRECTORY_ENTRY *et;
+     const IMAGE_RESOURCE_DIR_STRING_U *str;
+ 
+-    TRACE( "%p %p %lx\n", module, func, param );
++    TRACE( "%p %p %lldx\n", module, func, param );
+ 
+     if (!flags) flags = RESOURCE_ENUM_LN | RESOURCE_ENUM_MUI;
+     if (!(flags & RESOURCE_ENUM_LN)) return ret;

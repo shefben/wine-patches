@@ -1,0 +1,390 @@
+From: "Gabriel Ivăncescu" <gabrielopcode@gmail.com>
+Subject: [PATCH v2 5/6] ddraw: Use WINED3D_SWAPCHAIN_NO_WINDOW_CHANGES also if DDSCL_NOWINDOWCHANGES is set.
+Message-Id: <dcbec2a962378f81937d4e4c267749f1e3f5aecb.1641218774.git.gabrielopcode@gmail.com>
+Date: Mon,  3 Jan 2022 16:08:11 +0200
+In-Reply-To: <2c03f3290ba61e0e2624df78ddd3276b1ccd3dd5.1641218774.git.gabrielopcode@gmail.com>
+References: <2c03f3290ba61e0e2624df78ddd3276b1ccd3dd5.1641218774.git.gabrielopcode@gmail.com>
+
+Signed-off-by: Gabriel Ivăncescu <gabrielopcode@gmail.com>
+---
+ dlls/ddraw/ddraw.c        | 14 ++++-----
+ dlls/ddraw/tests/ddraw1.c | 65 +++++++++++++++++++++++++++++++++++++++
+ dlls/ddraw/tests/ddraw2.c | 65 +++++++++++++++++++++++++++++++++++++++
+ dlls/ddraw/tests/ddraw4.c | 65 +++++++++++++++++++++++++++++++++++++++
+ dlls/ddraw/tests/ddraw7.c | 65 +++++++++++++++++++++++++++++++++++++++
+ 5 files changed, 267 insertions(+), 7 deletions(-)
+
+diff --git a/dlls/ddraw/ddraw.c b/dlls/ddraw/ddraw.c
+index 77172d4..ff78dae 100644
+--- a/dlls/ddraw/ddraw.c
++++ b/dlls/ddraw/ddraw.c
+@@ -559,7 +559,7 @@ static HRESULT ddraw_set_focus_window(struct ddraw *ddraw, HWND window)
+ }
+ 
+ static HRESULT ddraw_attach_d3d_device(struct ddraw *ddraw, HWND window,
+-        BOOL windowed, struct wined3d_swapchain **wined3d_swapchain)
++        DWORD cooplevel, struct wined3d_swapchain **wined3d_swapchain)
+ {
+     struct wined3d_swapchain_desc swapchain_desc;
+     struct wined3d_display_mode mode;
+@@ -629,10 +629,13 @@ static HRESULT ddraw_attach_d3d_device(struct ddraw *ddraw, HWND window,
+     swapchain_desc.backbuffer_count = 1;
+     swapchain_desc.swap_effect = WINED3D_SWAP_EFFECT_DISCARD;
+     swapchain_desc.device_window = window;
+-    swapchain_desc.windowed = windowed;
++    swapchain_desc.windowed = !(cooplevel & DDSCL_FULLSCREEN);
+     swapchain_desc.flags = WINED3D_SWAPCHAIN_ALLOW_MODE_SWITCH
+             | WINED3D_SWAPCHAIN_IMPLICIT | WINED3D_SWAPCHAIN_NO_WINDOW_CHANGES;
+-
++    
++    if ((cooplevel & DDSCL_NOWINDOWCHANGES) || window != GetForegroundWindow())
++         swapchain_desc.flags |= WINED3D_SWAPCHAIN_NO_WINDOW_CHANGES;
++        
+     if (ddraw->flags & DDRAW_NO3D)
+         return wined3d_swapchain_create(ddraw->wined3d_device, &swapchain_desc,
+                 &ddraw->state_parent, NULL, &ddraw_null_wined3d_parent_ops, wined3d_swapchain);
+
+@@ -642,7 +642,7 @@ static HRESULT ddraw_attach_d3d_device(struct ddraw *ddraw, HWND window,
+     return DD_OK;
+ }
+ 
+-static HRESULT ddraw_create_swapchain(struct ddraw *ddraw, HWND window, BOOL windowed)
++static HRESULT ddraw_create_swapchain(struct ddraw *ddraw, HWND window, DWORD cooplevel)
+ {
+     HRESULT hr;
+ 
+@@ -652,7 +652,7 @@ static HRESULT ddraw_create_swapchain(struct ddraw *ddraw, HWND window, BOOL win
+         return E_FAIL;
+     }
+ 
+-    if (FAILED(hr = ddraw_attach_d3d_device(ddraw, window, windowed, &ddraw->wined3d_swapchain)))
++    if (FAILED(hr = ddraw_attach_d3d_device(ddraw, window, cooplevel, &ddraw->wined3d_swapchain)))
+     {
+         ERR("Failed to create swapchain, hr %#x.\n", hr);
+         return hr;
+@@ -778,7 +778,7 @@ static HRESULT WINAPI ddraw1_RestoreDisplayMode(IDirectDraw *iface)
+  * Unsure about this: DDSCL_FPUSETUP
+  *
+  * These don't seem very important for wine:
+- *  DDSCL_ALLOWREBOOT, DDSCL_NOWINDOWCHANGES, DDSCL_ALLOWMODEX
++ *  DDSCL_ALLOWREBOOT, DDSCL_ALLOWMODEX
+  *
+  * Returns:
+  *  DD_OK if the cooperative level was set successfully
+@@ -947,7 +947,7 @@ static HRESULT ddraw_set_cooperative_level(struct ddraw *ddraw, HWND window,
+         ddraw_destroy_swapchain(ddraw);
+     }
+ 
+-    if (FAILED(hr = ddraw_create_swapchain(ddraw, window, !(cooplevel & DDSCL_FULLSCREEN))))
++    if (FAILED(hr = ddraw_create_swapchain(ddraw, window, cooplevel)))
+         ERR("Failed to create swapchain, hr %#x.\n", hr);
+ 
+     if (restore_state)
+diff --git a/dlls/ddraw/tests/ddraw1.c b/dlls/ddraw/tests/ddraw1.c
+index f613d91..c9cb638 100644
+--- a/dlls/ddraw/tests/ddraw1.c
++++ b/dlls/ddraw/tests/ddraw1.c
+@@ -2636,6 +2636,71 @@ static void test_window_style(void)
+     tmp = GetWindowLongA(window, GWL_EXSTYLE);
+     ok(tmp == exstyle, "Expected window extended style %#x, got %#x.\n", exstyle, tmp);
+ 
++    hr = IDirectDraw_SetCooperativeLevel(ddraw, window, DDSCL_EXCLUSIVE | DDSCL_FULLSCREEN | DDSCL_NOWINDOWCHANGES);
++    ok(SUCCEEDED(hr), "SetCooperativeLevel failed, hr %#x.\n", hr);
++
++    tmp = GetWindowLongA(window, GWL_STYLE);
++    todo_wine ok(tmp == style, "Expected window style %#x, got %#x.\n", style, tmp);
++    tmp = GetWindowLongA(window, GWL_EXSTYLE);
++    todo_wine ok(tmp == exstyle, "Expected window extended style %#x, got %#x.\n", exstyle, tmp);
++
++    hr = IDirectDraw_SetCooperativeLevel(ddraw, window, DDSCL_EXCLUSIVE | DDSCL_FULLSCREEN);
++    ok(SUCCEEDED(hr), "SetCooperativeLevel failed, hr %#x.\n", hr);
++
++    tmp = GetWindowLongA(window, GWL_STYLE);
++    expected_style = style | WS_VISIBLE;
++    todo_wine ok(tmp == expected_style, "Expected window style %#x, got %#x.\n", expected_style, tmp);
++    tmp = GetWindowLongA(window, GWL_EXSTYLE);
++    expected_style = exstyle | WS_EX_TOPMOST;
++    todo_wine ok(tmp == expected_style, "Expected window extended style %#x, got %#x.\n", expected_style, tmp);
++
++    ShowWindow(window, SW_HIDE);
++    tmp = GetWindowLongA(window, GWL_STYLE);
++    todo_wine ok(tmp == style, "Expected window style %#x, got %#x.\n", style, tmp);
++    tmp = GetWindowLongA(window, GWL_EXSTYLE);
++    expected_style = exstyle | WS_EX_TOPMOST;
++    todo_wine ok(tmp == expected_style, "Expected window extended style %#x, got %#x.\n", expected_style, tmp);
++
++    hr = IDirectDraw_SetCooperativeLevel(ddraw, window, DDSCL_NORMAL | DDSCL_NOWINDOWCHANGES);
++    ok(SUCCEEDED(hr), "SetCooperativeLevel failed, hr %#x.\n", hr);
++
++    tmp = GetWindowLongA(window, GWL_STYLE);
++    ok(tmp == style, "Expected window style %#x, got %#x.\n", style, tmp);
++    tmp = GetWindowLongA(window, GWL_EXSTYLE);
++    expected_style = exstyle | WS_EX_TOPMOST;
++    ok(tmp == expected_style, "Expected window extended style %#x, got %#x.\n", expected_style, tmp);
++
++    hr = IDirectDraw_SetCooperativeLevel(ddraw, window, DDSCL_NORMAL);
++    ok(SUCCEEDED(hr), "SetCooperativeLevel failed, hr %#x.\n", hr);
++
++    tmp = GetWindowLongA(window, GWL_STYLE);
++    ok(tmp == style, "Expected window style %#x, got %#x.\n", style, tmp);
++    tmp = GetWindowLongA(window, GWL_EXSTYLE);
++    expected_style = exstyle | WS_EX_TOPMOST;
++    ok(tmp == expected_style, "Expected window extended style %#x, got %#x.\n", expected_style, tmp);
++
++    ret = SetForegroundWindow(window);
++    ok(ret, "Failed to set foreground window.\n");
++
++    hr = IDirectDraw_SetCooperativeLevel(ddraw, window, DDSCL_EXCLUSIVE | DDSCL_FULLSCREEN);
++    ok(SUCCEEDED(hr), "SetCooperativeLevel failed, hr %#x.\n", hr);
++
++    tmp = GetWindowLongA(window, GWL_STYLE);
++    expected_style = style | WS_VISIBLE;
++    todo_wine ok(tmp == expected_style, "Expected window style %#x, got %#x.\n", expected_style, tmp);
++    tmp = GetWindowLongA(window, GWL_EXSTYLE);
++    expected_style = exstyle | WS_EX_TOPMOST;
++    todo_wine ok(tmp == expected_style, "Expected window extended style %#x, got %#x.\n", expected_style, tmp);
++
++    ShowWindow(window, SW_HIDE);
++    hr = IDirectDraw_SetCooperativeLevel(ddraw, window, DDSCL_NORMAL);
++    ok(SUCCEEDED(hr), "SetCooperativeLevel failed, hr %#x.\n", hr);
++
++    tmp = GetWindowLongA(window, GWL_STYLE);
++    ok(tmp == style, "Expected window style %#x, got %#x.\n", style, tmp);
++    tmp = GetWindowLongA(window, GWL_EXSTYLE);
++    todo_wine ok(tmp == exstyle, "Expected window extended style %#x, got %#x.\n", exstyle, tmp);
++
+     ShowWindow(window, SW_SHOW);
+     ret = SetForegroundWindow(GetDesktopWindow());
+     ok(ret, "Failed to set foreground window.\n");
+diff --git a/dlls/ddraw/tests/ddraw2.c b/dlls/ddraw/tests/ddraw2.c
+index 88e5659..fa53319 100644
+--- a/dlls/ddraw/tests/ddraw2.c
++++ b/dlls/ddraw/tests/ddraw2.c
+@@ -2714,6 +2714,71 @@ static void test_window_style(void)
+     tmp = GetWindowLongA(window, GWL_EXSTYLE);
+     ok(tmp == exstyle, "Expected window extended style %#x, got %#x.\n", exstyle, tmp);
+ 
++    hr = IDirectDraw2_SetCooperativeLevel(ddraw, window, DDSCL_EXCLUSIVE | DDSCL_FULLSCREEN | DDSCL_NOWINDOWCHANGES);
++    ok(SUCCEEDED(hr), "SetCooperativeLevel failed, hr %#x.\n", hr);
++
++    tmp = GetWindowLongA(window, GWL_STYLE);
++    todo_wine ok(tmp == style, "Expected window style %#x, got %#x.\n", style, tmp);
++    tmp = GetWindowLongA(window, GWL_EXSTYLE);
++    todo_wine ok(tmp == exstyle, "Expected window extended style %#x, got %#x.\n", exstyle, tmp);
++
++    hr = IDirectDraw2_SetCooperativeLevel(ddraw, window, DDSCL_EXCLUSIVE | DDSCL_FULLSCREEN);
++    ok(SUCCEEDED(hr), "SetCooperativeLevel failed, hr %#x.\n", hr);
++
++    tmp = GetWindowLongA(window, GWL_STYLE);
++    expected_style = style | WS_VISIBLE;
++    todo_wine ok(tmp == expected_style, "Expected window style %#x, got %#x.\n", expected_style, tmp);
++    tmp = GetWindowLongA(window, GWL_EXSTYLE);
++    expected_style = exstyle | WS_EX_TOPMOST;
++    todo_wine ok(tmp == expected_style, "Expected window extended style %#x, got %#x.\n", expected_style, tmp);
++
++    ShowWindow(window, SW_HIDE);
++    tmp = GetWindowLongA(window, GWL_STYLE);
++    todo_wine ok(tmp == style, "Expected window style %#x, got %#x.\n", style, tmp);
++    tmp = GetWindowLongA(window, GWL_EXSTYLE);
++    expected_style = exstyle | WS_EX_TOPMOST;
++    todo_wine ok(tmp == expected_style, "Expected window extended style %#x, got %#x.\n", expected_style, tmp);
++
++    hr = IDirectDraw2_SetCooperativeLevel(ddraw, window, DDSCL_NORMAL | DDSCL_NOWINDOWCHANGES);
++    ok(SUCCEEDED(hr), "SetCooperativeLevel failed, hr %#x.\n", hr);
++
++    tmp = GetWindowLongA(window, GWL_STYLE);
++    ok(tmp == style, "Expected window style %#x, got %#x.\n", style, tmp);
++    tmp = GetWindowLongA(window, GWL_EXSTYLE);
++    expected_style = exstyle | WS_EX_TOPMOST;
++    ok(tmp == expected_style, "Expected window extended style %#x, got %#x.\n", expected_style, tmp);
++
++    hr = IDirectDraw2_SetCooperativeLevel(ddraw, window, DDSCL_NORMAL);
++    ok(SUCCEEDED(hr), "SetCooperativeLevel failed, hr %#x.\n", hr);
++
++    tmp = GetWindowLongA(window, GWL_STYLE);
++    ok(tmp == style, "Expected window style %#x, got %#x.\n", style, tmp);
++    tmp = GetWindowLongA(window, GWL_EXSTYLE);
++    expected_style = exstyle | WS_EX_TOPMOST;
++    ok(tmp == expected_style, "Expected window extended style %#x, got %#x.\n", expected_style, tmp);
++
++    ret = SetForegroundWindow(window);
++    ok(ret, "Failed to set foreground window.\n");
++
++    hr = IDirectDraw2_SetCooperativeLevel(ddraw, window, DDSCL_EXCLUSIVE | DDSCL_FULLSCREEN);
++    ok(SUCCEEDED(hr), "SetCooperativeLevel failed, hr %#x.\n", hr);
++
++    tmp = GetWindowLongA(window, GWL_STYLE);
++    expected_style = style | WS_VISIBLE;
++    todo_wine ok(tmp == expected_style, "Expected window style %#x, got %#x.\n", expected_style, tmp);
++    tmp = GetWindowLongA(window, GWL_EXSTYLE);
++    expected_style = exstyle | WS_EX_TOPMOST;
++    todo_wine ok(tmp == expected_style, "Expected window extended style %#x, got %#x.\n", expected_style, tmp);
++
++    ShowWindow(window, SW_HIDE);
++    hr = IDirectDraw2_SetCooperativeLevel(ddraw, window, DDSCL_NORMAL);
++    ok(SUCCEEDED(hr), "SetCooperativeLevel failed, hr %#x.\n", hr);
++
++    tmp = GetWindowLongA(window, GWL_STYLE);
++    ok(tmp == style, "Expected window style %#x, got %#x.\n", style, tmp);
++    tmp = GetWindowLongA(window, GWL_EXSTYLE);
++    todo_wine ok(tmp == exstyle, "Expected window extended style %#x, got %#x.\n", exstyle, tmp);
++
+     ShowWindow(window, SW_SHOW);
+     ret = SetForegroundWindow(GetDesktopWindow());
+     ok(ret, "Failed to set foreground window.\n");
+diff --git a/dlls/ddraw/tests/ddraw4.c b/dlls/ddraw/tests/ddraw4.c
+index 170d843..738448f 100644
+--- a/dlls/ddraw/tests/ddraw4.c
++++ b/dlls/ddraw/tests/ddraw4.c
+@@ -2950,6 +2950,71 @@ static void test_window_style(void)
+     tmp = GetWindowLongA(window, GWL_EXSTYLE);
+     ok(tmp == exstyle, "Expected window extended style %#x, got %#x.\n", exstyle, tmp);
+ 
++    hr = IDirectDraw4_SetCooperativeLevel(ddraw, window, DDSCL_EXCLUSIVE | DDSCL_FULLSCREEN | DDSCL_NOWINDOWCHANGES);
++    ok(SUCCEEDED(hr), "SetCooperativeLevel failed, hr %#x.\n", hr);
++
++    tmp = GetWindowLongA(window, GWL_STYLE);
++    todo_wine ok(tmp == style, "Expected window style %#x, got %#x.\n", style, tmp);
++    tmp = GetWindowLongA(window, GWL_EXSTYLE);
++    todo_wine ok(tmp == exstyle, "Expected window extended style %#x, got %#x.\n", exstyle, tmp);
++
++    hr = IDirectDraw4_SetCooperativeLevel(ddraw, window, DDSCL_EXCLUSIVE | DDSCL_FULLSCREEN);
++    ok(SUCCEEDED(hr), "SetCooperativeLevel failed, hr %#x.\n", hr);
++
++    tmp = GetWindowLongA(window, GWL_STYLE);
++    expected_style = style | WS_VISIBLE;
++    todo_wine ok(tmp == expected_style, "Expected window style %#x, got %#x.\n", expected_style, tmp);
++    tmp = GetWindowLongA(window, GWL_EXSTYLE);
++    expected_style = exstyle | WS_EX_TOPMOST;
++    todo_wine ok(tmp == expected_style, "Expected window extended style %#x, got %#x.\n", expected_style, tmp);
++
++    ShowWindow(window, SW_HIDE);
++    tmp = GetWindowLongA(window, GWL_STYLE);
++    todo_wine ok(tmp == style, "Expected window style %#x, got %#x.\n", style, tmp);
++    tmp = GetWindowLongA(window, GWL_EXSTYLE);
++    expected_style = exstyle | WS_EX_TOPMOST;
++    todo_wine ok(tmp == expected_style, "Expected window extended style %#x, got %#x.\n", expected_style, tmp);
++
++    hr = IDirectDraw4_SetCooperativeLevel(ddraw, window, DDSCL_NORMAL | DDSCL_NOWINDOWCHANGES);
++    ok(SUCCEEDED(hr), "SetCooperativeLevel failed, hr %#x.\n", hr);
++
++    tmp = GetWindowLongA(window, GWL_STYLE);
++    ok(tmp == style, "Expected window style %#x, got %#x.\n", style, tmp);
++    tmp = GetWindowLongA(window, GWL_EXSTYLE);
++    expected_style = exstyle | WS_EX_TOPMOST;
++    ok(tmp == expected_style, "Expected window extended style %#x, got %#x.\n", expected_style, tmp);
++
++    hr = IDirectDraw4_SetCooperativeLevel(ddraw, window, DDSCL_NORMAL);
++    ok(SUCCEEDED(hr), "SetCooperativeLevel failed, hr %#x.\n", hr);
++
++    tmp = GetWindowLongA(window, GWL_STYLE);
++    ok(tmp == style, "Expected window style %#x, got %#x.\n", style, tmp);
++    tmp = GetWindowLongA(window, GWL_EXSTYLE);
++    expected_style = exstyle | WS_EX_TOPMOST;
++    ok(tmp == expected_style, "Expected window extended style %#x, got %#x.\n", expected_style, tmp);
++
++    ret = SetForegroundWindow(window);
++    ok(ret, "Failed to set foreground window.\n");
++
++    hr = IDirectDraw4_SetCooperativeLevel(ddraw, window, DDSCL_EXCLUSIVE | DDSCL_FULLSCREEN);
++    ok(SUCCEEDED(hr), "SetCooperativeLevel failed, hr %#x.\n", hr);
++
++    tmp = GetWindowLongA(window, GWL_STYLE);
++    expected_style = style | WS_VISIBLE;
++    todo_wine ok(tmp == expected_style, "Expected window style %#x, got %#x.\n", expected_style, tmp);
++    tmp = GetWindowLongA(window, GWL_EXSTYLE);
++    expected_style = exstyle | WS_EX_TOPMOST;
++    todo_wine ok(tmp == expected_style, "Expected window extended style %#x, got %#x.\n", expected_style, tmp);
++
++    ShowWindow(window, SW_HIDE);
++    hr = IDirectDraw4_SetCooperativeLevel(ddraw, window, DDSCL_NORMAL);
++    ok(SUCCEEDED(hr), "SetCooperativeLevel failed, hr %#x.\n", hr);
++
++    tmp = GetWindowLongA(window, GWL_STYLE);
++    ok(tmp == style, "Expected window style %#x, got %#x.\n", style, tmp);
++    tmp = GetWindowLongA(window, GWL_EXSTYLE);
++    todo_wine ok(tmp == exstyle, "Expected window extended style %#x, got %#x.\n", exstyle, tmp);
++
+     ShowWindow(window, SW_SHOW);
+     ret = SetForegroundWindow(GetDesktopWindow());
+     ok(ret, "Failed to set foreground window.\n");
+diff --git a/dlls/ddraw/tests/ddraw7.c b/dlls/ddraw/tests/ddraw7.c
+index 22f581b..9d43a9b 100644
+--- a/dlls/ddraw/tests/ddraw7.c
++++ b/dlls/ddraw/tests/ddraw7.c
+@@ -2615,6 +2615,71 @@ static void test_window_style(void)
+     tmp = GetWindowLongA(window, GWL_EXSTYLE);
+     ok(tmp == exstyle, "Expected window extended style %#x, got %#x.\n", exstyle, tmp);
+ 
++    hr = IDirectDraw7_SetCooperativeLevel(ddraw, window, DDSCL_EXCLUSIVE | DDSCL_FULLSCREEN | DDSCL_NOWINDOWCHANGES);
++    ok(SUCCEEDED(hr), "SetCooperativeLevel failed, hr %#x.\n", hr);
++
++    tmp = GetWindowLongA(window, GWL_STYLE);
++    todo_wine ok(tmp == style, "Expected window style %#x, got %#x.\n", style, tmp);
++    tmp = GetWindowLongA(window, GWL_EXSTYLE);
++    todo_wine ok(tmp == exstyle, "Expected window extended style %#x, got %#x.\n", exstyle, tmp);
++
++    hr = IDirectDraw7_SetCooperativeLevel(ddraw, window, DDSCL_EXCLUSIVE | DDSCL_FULLSCREEN);
++    ok(SUCCEEDED(hr), "SetCooperativeLevel failed, hr %#x.\n", hr);
++
++    tmp = GetWindowLongA(window, GWL_STYLE);
++    expected_style = style | WS_VISIBLE;
++    todo_wine ok(tmp == expected_style, "Expected window style %#x, got %#x.\n", expected_style, tmp);
++    tmp = GetWindowLongA(window, GWL_EXSTYLE);
++    expected_style = exstyle | WS_EX_TOPMOST;
++    todo_wine ok(tmp == expected_style, "Expected window extended style %#x, got %#x.\n", expected_style, tmp);
++
++    ShowWindow(window, SW_HIDE);
++    tmp = GetWindowLongA(window, GWL_STYLE);
++    todo_wine ok(tmp == style, "Expected window style %#x, got %#x.\n", style, tmp);
++    tmp = GetWindowLongA(window, GWL_EXSTYLE);
++    expected_style = exstyle | WS_EX_TOPMOST;
++    todo_wine ok(tmp == expected_style, "Expected window extended style %#x, got %#x.\n", expected_style, tmp);
++
++    hr = IDirectDraw7_SetCooperativeLevel(ddraw, window, DDSCL_NORMAL | DDSCL_NOWINDOWCHANGES);
++    ok(SUCCEEDED(hr), "SetCooperativeLevel failed, hr %#x.\n", hr);
++
++    tmp = GetWindowLongA(window, GWL_STYLE);
++    ok(tmp == style, "Expected window style %#x, got %#x.\n", style, tmp);
++    tmp = GetWindowLongA(window, GWL_EXSTYLE);
++    expected_style = exstyle | WS_EX_TOPMOST;
++    ok(tmp == expected_style, "Expected window extended style %#x, got %#x.\n", expected_style, tmp);
++
++    hr = IDirectDraw7_SetCooperativeLevel(ddraw, window, DDSCL_NORMAL);
++    ok(SUCCEEDED(hr), "SetCooperativeLevel failed, hr %#x.\n", hr);
++
++    tmp = GetWindowLongA(window, GWL_STYLE);
++    ok(tmp == style, "Expected window style %#x, got %#x.\n", style, tmp);
++    tmp = GetWindowLongA(window, GWL_EXSTYLE);
++    expected_style = exstyle | WS_EX_TOPMOST;
++    ok(tmp == expected_style, "Expected window extended style %#x, got %#x.\n", expected_style, tmp);
++
++    ret = SetForegroundWindow(window);
++    ok(ret, "Failed to set foreground window.\n");
++
++    hr = IDirectDraw7_SetCooperativeLevel(ddraw, window, DDSCL_EXCLUSIVE | DDSCL_FULLSCREEN);
++    ok(SUCCEEDED(hr), "SetCooperativeLevel failed, hr %#x.\n", hr);
++
++    tmp = GetWindowLongA(window, GWL_STYLE);
++    expected_style = style | WS_VISIBLE;
++    todo_wine ok(tmp == expected_style, "Expected window style %#x, got %#x.\n", expected_style, tmp);
++    tmp = GetWindowLongA(window, GWL_EXSTYLE);
++    expected_style = exstyle | WS_EX_TOPMOST;
++    todo_wine ok(tmp == expected_style, "Expected window extended style %#x, got %#x.\n", expected_style, tmp);
++
++    ShowWindow(window, SW_HIDE);
++    hr = IDirectDraw7_SetCooperativeLevel(ddraw, window, DDSCL_NORMAL);
++    ok(SUCCEEDED(hr), "SetCooperativeLevel failed, hr %#x.\n", hr);
++
++    tmp = GetWindowLongA(window, GWL_STYLE);
++    ok(tmp == style, "Expected window style %#x, got %#x.\n", style, tmp);
++    tmp = GetWindowLongA(window, GWL_EXSTYLE);
++    todo_wine ok(tmp == exstyle, "Expected window extended style %#x, got %#x.\n", exstyle, tmp);
++
+     ShowWindow(window, SW_SHOW);
+     ret = SetForegroundWindow(GetDesktopWindow());
+     ok(ret, "Failed to set foreground window.\n");
+
+-- 
+2.34.1
+

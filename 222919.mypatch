@@ -1,0 +1,64 @@
+From: Derek Lesho <dlesho@codeweavers.com>
+Subject: [PATCH 5/6] mfmediaengine: Close the media session on shutdown.
+Message-Id: <20220104173527.77306-5-dlesho@codeweavers.com>
+Date: Tue,  4 Jan 2022 12:35:26 -0500
+In-Reply-To: <20220104173527.77306-1-dlesho@codeweavers.com>
+References: <20220104173527.77306-1-dlesho@codeweavers.com>
+
+Signed-off-by: Derek Lesho <dlesho@codeweavers.com>
+---
+ dlls/mfmediaengine/main.c | 9 +++++++++
+ 1 file changed, 9 insertions(+)
+
+diff --git a/dlls/mfmediaengine/main.c b/dlls/mfmediaengine/main.c
+index f7f3afa2a05..c7ab664936c 100644
+--- a/dlls/mfmediaengine/main.c
++++ b/dlls/mfmediaengine/main.c
+@@ -167,6 +167,7 @@ struct media_engine
+         } d3d11;
+     } video_frame;
+     CRITICAL_SECTION cs;
++    HANDLE session_closed;
+ };
+ 
+ static void media_engine_release_video_frame_resources(struct media_engine *engine)
+@@ -917,6 +918,10 @@ static HRESULT WINAPI media_engine_session_events_Invoke(IMFAsyncCallback *iface
+ 
+             IMFMediaEngineNotify_EventNotify(engine->callback, MF_MEDIA_ENGINE_EVENT_ENDED, 0, 0);
+             break;
++        case MESessionClosed:
++
++            SetEvent(engine->session_closed);
++            break;
+     }
+ 
+ failed:
+@@ -1297,6 +1302,7 @@ static void free_media_engine(struct media_engine *engine)
+     }
+     SysFreeString(engine->current_source);
+     DeleteCriticalSection(&engine->cs);
++    CloseHandle(engine->session_closed);
+     free(engine->video_frame.buffer);
+     free(engine);
+ }
+@@ -1956,6 +1962,8 @@ static HRESULT WINAPI media_engine_Shutdown(IMFMediaEngine *iface)
+     else
+     {
+         media_engine_set_flag(engine, FLAGS_ENGINE_SHUT_DOWN, TRUE);
++        IMFMediaSession_Close(engine->session);
++        WaitForSingleObject(engine->session_closed, INFINITE);
+         IMFMediaSession_Shutdown(engine->session);
+     }
+     LeaveCriticalSection(&engine->cs);
+@@ -2451,6 +2459,7 @@ static HRESULT init_media_engine(DWORD flags, IMFAttributes *attributes, struct
+     engine->duration = NAN;
+     engine->video_frame.pts = MINLONGLONG;
+     InitializeCriticalSection(&engine->cs);
++    engine->session_closed = CreateEventW(NULL, TRUE, FALSE, NULL);
+ 
+     hr = IMFAttributes_GetUnknown(attributes, &MF_MEDIA_ENGINE_CALLBACK, &IID_IMFMediaEngineNotify,
+             (void **)&engine->callback);
+
+-- 
+2.33.1
+

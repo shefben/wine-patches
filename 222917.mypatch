@@ -1,0 +1,43 @@
+From: Derek Lesho <dlesho@codeweavers.com>
+Subject: [PATCH 3/6] mf/session: Fix backwards handling of MF_TOPONODE_NOSHUTDOWN_ON_REMOVE.
+Message-Id: <20220104173527.77306-3-dlesho@codeweavers.com>
+Date: Tue,  4 Jan 2022 12:35:24 -0500
+In-Reply-To: <20220104173527.77306-1-dlesho@codeweavers.com>
+References: <20220104173527.77306-1-dlesho@codeweavers.com>
+
+Signed-off-by: Derek Lesho <dlesho@codeweavers.com>
+---
+ dlls/mf/session.c | 8 ++++----
+ 1 file changed, 4 insertions(+), 4 deletions(-)
+
+diff --git a/dlls/mf/session.c b/dlls/mf/session.c
+index e3d77864494..c1215998bbe 100644
+--- a/dlls/mf/session.c
++++ b/dlls/mf/session.c
+@@ -692,7 +692,7 @@ static void release_topo_node(struct topo_node *node)
+ 
+ static void session_shutdown_current_topology(struct media_session *session)
+ {
+-    unsigned int shutdown, force_shutdown;
++    unsigned int noshutdown, force_shutdown;
+     MF_TOPOLOGY_TYPE node_type;
+     IMFStreamSink *stream_sink;
+     IMFTopology *topology;
+@@ -712,10 +712,10 @@ static void session_shutdown_current_topology(struct media_session *session)
+         if (SUCCEEDED(IMFTopologyNode_GetNodeType(node, &node_type)) &&
+                 node_type == MF_TOPOLOGY_OUTPUT_NODE)
+         {
+-            shutdown = 1;
+-            IMFTopologyNode_GetUINT32(node, &MF_TOPONODE_NOSHUTDOWN_ON_REMOVE, &shutdown);
++            noshutdown = 1;
++            IMFTopologyNode_GetUINT32(node, &MF_TOPONODE_NOSHUTDOWN_ON_REMOVE, &noshutdown);
+ 
+-            if (force_shutdown || shutdown)
++            if (force_shutdown || !noshutdown)
+             {
+                 if (SUCCEEDED(IMFTopologyNode_GetUnknown(node, &_MF_TOPONODE_IMFActivate, &IID_IMFActivate,
+                         (void **)&activate)))
+
+-- 
+2.33.1
+

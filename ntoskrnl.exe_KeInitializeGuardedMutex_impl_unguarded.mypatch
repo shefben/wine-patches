@@ -1,0 +1,41 @@
+diff --git a/dlls/ntoskrnl.exe/ntoskrnl.exe.spec b/dlls/ntoskrnl.exe/ntoskrnl.exe.spec
+index 69c9a4580c7..5d759ec633d 100755
+--- a/dlls/ntoskrnl.exe/ntoskrnl.exe.spec   
++++ b/dlls/ntoskrnl.exe/ntoskrnl.exe.spec
+@@ -575,6 +575,7 @@
+ @ stub KeInitializeInterrupt
+ @ stub KeInitializeMutant
+ @ stdcall KeInitializeMutex(ptr long)
++@ stdcall KeInitializeGuardedMutex(ptr)
+ @ stub KeInitializeQueue
+ @ stdcall KeInitializeSemaphore(ptr long long)
+ @ stdcall KeInitializeSpinLock(ptr) NTOSKRNL_KeInitializeSpinLock
+diff --git a/dlls/ntoskrnl.exe/sync.c b/dlls/ntoskrnl.exe/sync.c
+index 13e2d3e7559..e38fa2a3777 100755
+--- a/dlls/ntoskrnl.exe/sync.c      
++++ b/dlls/ntoskrnl.exe/sync.c
+@@ -169,6 +169,24 @@ NTSTATUS WINAPI KeWaitForMutexObject( PRKMUTEX mutex, KWAIT_REASON reason,
+     return KeWaitForSingleObject( mutex, reason, mode, alertable, timeout );
+ }
+ 
++/***********************************************************************
++ *           KeInitializeGuardedMutex   (NTOSKRNL.EXE.@)
++ */
++void WINAPI KeInitializeGuardedMutex(/*PKGUARDED_MUTEX*/ PRKMUTEX Mutex)
++{
++  /* 
++  Mutex->Owner = 0;
++  Mutex->Contention = 0;
++  Mutex->Count = 1;
++  Mutex->entry.Header.SignalState = 0;
++  Mutex->entry.Header.Type = 7;
++  Mutex->entry.Header.TimerControlFlags = 1;
++  Mutex->entry.Header.ThreadControlFlags = 6;
++  Mutex->entry.Header.WaitListHead.Blink = &Mutex->Event.Header.WaitListHead;
++  Mutex->entry.Header.WaitListHead.Flink = &Mutex->Event.Header.WaitListHead;
++  */
++  KeInitializeMutex( Mutex, 0 );
++}
+ 
+ /***********************************************************************
+  *           KeInitializeEvent   (NTOSKRNL.EXE.@)

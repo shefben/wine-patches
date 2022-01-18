@@ -1,0 +1,197 @@
+From: "André Zwing" <nerv@dawncrow.de>
+Subject: [PATCH] advapi32: Fix some spec file entries (try 3)
+Message-Id: <20220115143105.1053301-1-nerv@dawncrow.de>
+Date: Sat, 15 Jan 2022 15:31:05 +0100
+
+(including make_specfiles changes now)
+
+Signed-off-by: André Zwing <nerv@dawncrow.de>
+---
+ dlls/advapi32/advapi32.spec                   | 22 +++++++++----------
+ .../api-ms-win-core-registry-l2-1-0.spec      |  8 +++----
+ .../api-ms-win-core-registry-l2-2-0.spec      |  8 +++----
+ .../api-ms-win-downlevel-advapi32-l2-1-0.spec |  2 +-
+ .../api-ms-win-security-lsalookup-l2-1-0.spec |  4 ++--
+ .../api-ms-win-security-lsalookup-l2-1-1.spec |  4 ++--
+ .../api-ms-win-security-sddl-l1-1-0.spec      |  2 +-
+ .../api-ms-win-service-winsvc-l1-1-0.spec     |  2 +-
+ .../api-ms-win-service-winsvc-l1-2-0.spec     |  2 +-
+ 9 files changed, 27 insertions(+), 27 deletions(-)
+
+diff --git a/dlls/advapi32/advapi32.spec b/dlls/advapi32/advapi32.spec
+index 0391643aa6a..cefc8dc2899 100644
+--- a/dlls/advapi32/advapi32.spec
++++ b/dlls/advapi32/advapi32.spec
+@@ -91,7 +91,7 @@
+ # @ stub CancelOverlappedAccess
+ @ stdcall -import ChangeServiceConfig2A(long long ptr)
+ @ stdcall -import ChangeServiceConfig2W(long long ptr)
+-@ stdcall -import ChangeServiceConfigA(long long long long wstr str ptr str str str str)
++@ stdcall -import ChangeServiceConfigA(long long long long str str ptr str str str str)
+ @ stdcall -import ChangeServiceConfigW(long long long long wstr wstr ptr wstr wstr wstr wstr)
+ # @ stub CheckForHiberboot
+ @ stdcall -import CheckTokenMembership(long ptr ptr)
+@@ -129,8 +129,8 @@
+ # @ stub ConvertStringSDToSDRootDomainW
+ @ stdcall ConvertStringSecurityDescriptorToSecurityDescriptorA(str long ptr ptr)
+ @ stdcall -import ConvertStringSecurityDescriptorToSecurityDescriptorW(wstr long ptr ptr)
+-@ stdcall ConvertStringSidToSidA(ptr ptr)
+-@ stdcall -import ConvertStringSidToSidW(ptr ptr)
++@ stdcall ConvertStringSidToSidA(str ptr)
++@ stdcall -import ConvertStringSidToSidW(wstr ptr)
+ @ stdcall -import ConvertToAutoInheritPrivateObjectSecurity(ptr ptr ptr ptr long ptr)
+ @ stdcall -import CopySid(long ptr ptr)
+ # @ stub CreateCodeAuthzLevel
+@@ -429,16 +429,16 @@
+ @ stdcall LogonUserW(wstr wstr wstr long long ptr)
+ @ stdcall LookupAccountNameA(str str ptr ptr ptr ptr ptr)
+ @ stdcall LookupAccountNameW(wstr wstr ptr ptr ptr ptr ptr)
+-@ stdcall LookupAccountSidA(ptr ptr ptr ptr ptr ptr ptr)
++@ stdcall LookupAccountSidA(str ptr ptr ptr ptr ptr ptr)
+ @ stdcall LookupAccountSidLocalA(ptr ptr ptr ptr ptr ptr)
+ @ stdcall LookupAccountSidLocalW(ptr ptr ptr ptr ptr ptr)
+-@ stdcall LookupAccountSidW(ptr ptr ptr ptr ptr ptr ptr)
++@ stdcall LookupAccountSidW(wstr ptr ptr ptr ptr ptr ptr)
+ @ stdcall LookupPrivilegeDisplayNameA(str str str ptr ptr)
+ @ stdcall LookupPrivilegeDisplayNameW(wstr wstr wstr ptr ptr)
+ @ stdcall LookupPrivilegeNameA(str ptr ptr ptr)
+ @ stdcall LookupPrivilegeNameW(wstr ptr ptr ptr)
+-@ stdcall LookupPrivilegeValueA(ptr ptr ptr)
+-@ stdcall LookupPrivilegeValueW(ptr ptr ptr)
++@ stdcall LookupPrivilegeValueA(str str ptr)
++@ stdcall LookupPrivilegeValueW(wstr wstr ptr)
+ @ stdcall LookupSecurityDescriptorPartsA(ptr ptr ptr ptr ptr ptr ptr)
+ @ stdcall LookupSecurityDescriptorPartsW(ptr ptr ptr ptr ptr ptr ptr)
+ @ stdcall LsaAddAccountRights(ptr ptr ptr long)
+@@ -681,17 +681,17 @@
+ @ stdcall RegReplaceKeyW(long wstr wstr wstr)
+ @ stdcall -import RegRestoreKeyA(long str long)
+ @ stdcall -import RegRestoreKeyW(long wstr long)
+-@ stdcall RegSaveKeyA(long ptr ptr)
++@ stdcall RegSaveKeyA(long str ptr)
+ @ stdcall -import RegSaveKeyExA(long str ptr long)
+ @ stdcall -import RegSaveKeyExW(long wstr ptr long)
+-@ stdcall RegSaveKeyW(long ptr ptr)
++@ stdcall RegSaveKeyW(long wstr ptr)
+ @ stdcall -import RegSetKeySecurity(long long ptr)
+ @ stdcall -import RegSetKeyValueA(long str str long ptr long)
+ @ stdcall -import RegSetKeyValueW(long wstr wstr long ptr long)
+-@ stdcall RegSetValueA(long str long ptr long)
++@ stdcall RegSetValueA(long str long str long)
+ @ stdcall -import RegSetValueExA(long str long long ptr long)
+ @ stdcall -import RegSetValueExW(long wstr long long ptr long)
+-@ stdcall RegSetValueW(long wstr long ptr long)
++@ stdcall RegSetValueW(long wstr long wstr long)
+ @ stdcall -import RegUnLoadKeyA(long str)
+ @ stdcall -import RegUnLoadKeyW(long wstr)
+ @ stdcall RegisterEventSourceA(str str)
+diff --git a/dlls/api-ms-win-core-registry-l2-1-0/api-ms-win-core-registry-l2-1-0.spec b/dlls/api-ms-win-core-registry-l2-1-0/api-ms-win-core-registry-l2-1-0.spec
+index 6d63dd997ff..17cd6e79311 100644
+--- a/dlls/api-ms-win-core-registry-l2-1-0/api-ms-win-core-registry-l2-1-0.spec
++++ b/dlls/api-ms-win-core-registry-l2-1-0/api-ms-win-core-registry-l2-1-0.spec
+@@ -25,9 +25,9 @@
+ @ stdcall RegQueryValueW(long wstr ptr ptr) advapi32.RegQueryValueW
+ @ stdcall RegReplaceKeyA(long str str str) advapi32.RegReplaceKeyA
+ @ stdcall RegReplaceKeyW(long wstr wstr wstr) advapi32.RegReplaceKeyW
+-@ stdcall RegSaveKeyA(long ptr ptr) advapi32.RegSaveKeyA
+-@ stdcall RegSaveKeyW(long ptr ptr) advapi32.RegSaveKeyW
++@ stdcall RegSaveKeyA(long str ptr) advapi32.RegSaveKeyA
++@ stdcall RegSaveKeyW(long wstr ptr) advapi32.RegSaveKeyW
+ @ stdcall RegSetKeyValueA(long str str long ptr long) advapi32.RegSetKeyValueA
+ @ stdcall RegSetKeyValueW(long wstr wstr long ptr long) advapi32.RegSetKeyValueW
+-@ stdcall RegSetValueA(long str long ptr long) advapi32.RegSetValueA
+-@ stdcall RegSetValueW(long wstr long ptr long) advapi32.RegSetValueW
++@ stdcall RegSetValueA(long str long str long) advapi32.RegSetValueA
++@ stdcall RegSetValueW(long wstr long wstr long) advapi32.RegSetValueW
+diff --git a/dlls/api-ms-win-core-registry-l2-2-0/api-ms-win-core-registry-l2-2-0.spec b/dlls/api-ms-win-core-registry-l2-2-0/api-ms-win-core-registry-l2-2-0.spec
+index 6d9ae1f4048..7710da384c5 100644
+--- a/dlls/api-ms-win-core-registry-l2-2-0/api-ms-win-core-registry-l2-2-0.spec
++++ b/dlls/api-ms-win-core-registry-l2-2-0/api-ms-win-core-registry-l2-2-0.spec
+@@ -23,7 +23,7 @@
+ @ stdcall RegQueryValueW(long wstr ptr ptr) advapi32.RegQueryValueW
+ @ stdcall RegReplaceKeyA(long str str str) advapi32.RegReplaceKeyA
+ @ stdcall RegReplaceKeyW(long wstr wstr wstr) advapi32.RegReplaceKeyW
+-@ stdcall RegSaveKeyA(long ptr ptr) advapi32.RegSaveKeyA
+-@ stdcall RegSaveKeyW(long ptr ptr) advapi32.RegSaveKeyW
+-@ stdcall RegSetValueA(long str long ptr long) advapi32.RegSetValueA
+-@ stdcall RegSetValueW(long wstr long ptr long) advapi32.RegSetValueW
++@ stdcall RegSaveKeyA(long str ptr) advapi32.RegSaveKeyA
++@ stdcall RegSaveKeyW(long wstr ptr) advapi32.RegSaveKeyW
++@ stdcall RegSetValueA(long str long str long) advapi32.RegSetValueA
++@ stdcall RegSetValueW(long wstr long wstr long) advapi32.RegSetValueW
+diff --git a/dlls/api-ms-win-downlevel-advapi32-l2-1-0/api-ms-win-downlevel-advapi32-l2-1-0.spec b/dlls/api-ms-win-downlevel-advapi32-l2-1-0/api-ms-win-downlevel-advapi32-l2-1-0.spec
+index 96e1a042eed..b0dabec0f34 100644
+--- a/dlls/api-ms-win-downlevel-advapi32-l2-1-0/api-ms-win-downlevel-advapi32-l2-1-0.spec
++++ b/dlls/api-ms-win-downlevel-advapi32-l2-1-0/api-ms-win-downlevel-advapi32-l2-1-0.spec
+@@ -1,7 +1,7 @@
+ @ stdcall CloseServiceHandle(long) advapi32.CloseServiceHandle
+ @ stdcall ConvertSidToStringSidW(ptr ptr) advapi32.ConvertSidToStringSidW
+ @ stdcall ConvertStringSecurityDescriptorToSecurityDescriptorW(wstr long ptr ptr) advapi32.ConvertStringSecurityDescriptorToSecurityDescriptorW
+-@ stdcall ConvertStringSidToSidW(ptr ptr) advapi32.ConvertStringSidToSidW
++@ stdcall ConvertStringSidToSidW(wstr ptr) advapi32.ConvertStringSidToSidW
+ @ stdcall CredDeleteW(wstr long long) advapi32.CredDeleteW
+ @ stdcall CredEnumerateW(wstr long ptr ptr) advapi32.CredEnumerateW
+ @ stdcall CredFree(ptr) advapi32.CredFree
+diff --git a/dlls/api-ms-win-security-lsalookup-l2-1-0/api-ms-win-security-lsalookup-l2-1-0.spec b/dlls/api-ms-win-security-lsalookup-l2-1-0/api-ms-win-security-lsalookup-l2-1-0.spec
+index 25b293939df..c1c3cd8e2aa 100644
+--- a/dlls/api-ms-win-security-lsalookup-l2-1-0/api-ms-win-security-lsalookup-l2-1-0.spec
++++ b/dlls/api-ms-win-security-lsalookup-l2-1-0/api-ms-win-security-lsalookup-l2-1-0.spec
+@@ -1,6 +1,6 @@
+ @ stdcall LookupAccountNameW(wstr wstr ptr ptr ptr ptr ptr) advapi32.LookupAccountNameW
+-@ stdcall LookupAccountSidW(ptr ptr ptr ptr ptr ptr ptr) advapi32.LookupAccountSidW
++@ stdcall LookupAccountSidW(wstr ptr ptr ptr ptr ptr ptr) advapi32.LookupAccountSidW
+ @ stdcall LookupPrivilegeDisplayNameW(wstr wstr wstr ptr ptr) advapi32.LookupPrivilegeDisplayNameW
+ @ stdcall LookupPrivilegeNameW(wstr ptr ptr ptr) advapi32.LookupPrivilegeNameW
+-@ stdcall LookupPrivilegeValueW(ptr ptr ptr) advapi32.LookupPrivilegeValueW
++@ stdcall LookupPrivilegeValueW(wstr wstr ptr) advapi32.LookupPrivilegeValueW
+ @ stdcall LsaEnumerateTrustedDomains(ptr ptr ptr long ptr) advapi32.LsaEnumerateTrustedDomains
+diff --git a/dlls/api-ms-win-security-lsalookup-l2-1-1/api-ms-win-security-lsalookup-l2-1-1.spec b/dlls/api-ms-win-security-lsalookup-l2-1-1/api-ms-win-security-lsalookup-l2-1-1.spec
+index 1a0ed04ace4..c06b1435333 100644
+--- a/dlls/api-ms-win-security-lsalookup-l2-1-1/api-ms-win-security-lsalookup-l2-1-1.spec
++++ b/dlls/api-ms-win-security-lsalookup-l2-1-1/api-ms-win-security-lsalookup-l2-1-1.spec
+@@ -1,7 +1,7 @@
+ @ stdcall LookupAccountNameW(wstr wstr ptr ptr ptr ptr ptr) advapi32.LookupAccountNameW
+-@ stdcall LookupAccountSidW(ptr ptr ptr ptr ptr ptr ptr) advapi32.LookupAccountSidW
++@ stdcall LookupAccountSidW(wstr ptr ptr ptr ptr ptr ptr) advapi32.LookupAccountSidW
+ @ stdcall LookupPrivilegeDisplayNameW(wstr wstr wstr ptr ptr) advapi32.LookupPrivilegeDisplayNameW
+ @ stdcall LookupPrivilegeNameW(wstr ptr ptr ptr) advapi32.LookupPrivilegeNameW
+-@ stdcall LookupPrivilegeValueW(ptr ptr ptr) advapi32.LookupPrivilegeValueW
++@ stdcall LookupPrivilegeValueW(wstr wstr ptr) advapi32.LookupPrivilegeValueW
+ @ stdcall LsaEnumerateTrustedDomains(ptr ptr ptr long ptr) advapi32.LsaEnumerateTrustedDomains
+ @ stub LsaManageSidNameMapping
+diff --git a/dlls/api-ms-win-security-sddl-l1-1-0/api-ms-win-security-sddl-l1-1-0.spec b/dlls/api-ms-win-security-sddl-l1-1-0/api-ms-win-security-sddl-l1-1-0.spec
+index 1ac8704c7c3..f2b12d4c629 100644
+--- a/dlls/api-ms-win-security-sddl-l1-1-0/api-ms-win-security-sddl-l1-1-0.spec
++++ b/dlls/api-ms-win-security-sddl-l1-1-0/api-ms-win-security-sddl-l1-1-0.spec
+@@ -1,4 +1,4 @@
+ @ stdcall ConvertSecurityDescriptorToStringSecurityDescriptorW(ptr long long ptr ptr) advapi32.ConvertSecurityDescriptorToStringSecurityDescriptorW
+ @ stdcall ConvertSidToStringSidW(ptr ptr) advapi32.ConvertSidToStringSidW
+ @ stdcall ConvertStringSecurityDescriptorToSecurityDescriptorW(wstr long ptr ptr) advapi32.ConvertStringSecurityDescriptorToSecurityDescriptorW
+-@ stdcall ConvertStringSidToSidW(ptr ptr) advapi32.ConvertStringSidToSidW
++@ stdcall ConvertStringSidToSidW(wstr ptr) advapi32.ConvertStringSidToSidW
+diff --git a/dlls/api-ms-win-service-winsvc-l1-1-0/api-ms-win-service-winsvc-l1-1-0.spec b/dlls/api-ms-win-service-winsvc-l1-1-0/api-ms-win-service-winsvc-l1-1-0.spec
+index d902c9d17b1..e68ac850bd4 100644
+--- a/dlls/api-ms-win-service-winsvc-l1-1-0/api-ms-win-service-winsvc-l1-1-0.spec
++++ b/dlls/api-ms-win-service-winsvc-l1-1-0/api-ms-win-service-winsvc-l1-1-0.spec
+@@ -1,5 +1,5 @@
+ @ stdcall ChangeServiceConfig2A(long long ptr) advapi32.ChangeServiceConfig2A
+-@ stdcall ChangeServiceConfigA(long long long long wstr str ptr str str str str) advapi32.ChangeServiceConfigA
++@ stdcall ChangeServiceConfigA(long long long long str str ptr str str str str) advapi32.ChangeServiceConfigA
+ @ stdcall ControlService(long long ptr) advapi32.ControlService
+ @ stub ControlServiceExA
+ @ stdcall CreateServiceA(long str str long long long long str str ptr str str str) advapi32.CreateServiceA
+diff --git a/dlls/api-ms-win-service-winsvc-l1-2-0/api-ms-win-service-winsvc-l1-2-0.spec b/dlls/api-ms-win-service-winsvc-l1-2-0/api-ms-win-service-winsvc-l1-2-0.spec
+index aa914b6cf9e..295194f38f3 100644
+--- a/dlls/api-ms-win-service-winsvc-l1-2-0/api-ms-win-service-winsvc-l1-2-0.spec
++++ b/dlls/api-ms-win-service-winsvc-l1-2-0/api-ms-win-service-winsvc-l1-2-0.spec
+@@ -1,5 +1,5 @@
+ @ stdcall ChangeServiceConfig2A(long long ptr) advapi32.ChangeServiceConfig2A
+-@ stdcall ChangeServiceConfigA(long long long long wstr str ptr str str str str) advapi32.ChangeServiceConfigA
++@ stdcall ChangeServiceConfigA(long long long long str str ptr str str str str) advapi32.ChangeServiceConfigA
+ @ stdcall ControlService(long long ptr) advapi32.ControlService
+ @ stub ControlServiceExA
+ @ stdcall CreateServiceA(long str str long long long long str str ptr str str str) advapi32.CreateServiceA
+
+-- 
+2.25.1
+

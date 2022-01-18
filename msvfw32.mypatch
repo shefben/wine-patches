@@ -1,0 +1,35 @@
+From f319cba77cfdfd673862d945196f58a83e5fe28a Mon Sep 17 00:00:00 2001
+From: David Adam <daadad0022@gmail.com>
+Date: Mon, 6 Jul 2020 18:29:25 -1000
+Subject: [PATCH 2/2] msvfw32/tests: WS_CHILD is set for window style when
+ parent is non NULL
+
+Signed-off-by: David Adam <daadad0022@gmail.com>
+---
+ dlls/msvfw32/mciwnd.c       |  8 ++++----
+ dlls/msvfw32/tests/mciwnd.c | 12 ++++++------
+ 2 files changed, 10 insertions(+), 10 deletions(-)
+
+diff --git a/dlls/msvfw32/mciwnd.c b/dlls/msvfw32/mciwnd.c
+index 0b35bad356..ae2635cd94 100644
+--- a/dlls/msvfw32/mciwnd.c
++++ b/dlls/msvfw32/mciwnd.c
+@@ -108,14 +108,14 @@ HWND VFWAPIV MCIWndCreateW(HWND hwndParent, HINSTANCE hInstance,
+ 
+     if (!hInstance) hInstance = GetModuleHandleW(0);
+ 
++    dwStyle |= WS_VISIBLE | WS_CLIPSIBLINGS | WS_CLIPCHILDREN;
++    
+     if (hwndParent)
+-        dwStyle |= WS_VISIBLE | WS_BORDER /*| WS_CHILD*/;
++        dwStyle |= WS_VISIBLE | WS_BORDER | WS_CHILD;
+     else
+         dwStyle |= WS_VISIBLE | WS_CAPTION | WS_SYSMENU | WS_THICKFRAME | WS_MINIMIZEBOX | WS_MAXIMIZEBOX;
+ 
+-    return CreateWindowExW(0, mciWndClassW, NULL,
+-                           dwStyle | WS_CLIPSIBLINGS | WS_CLIPCHILDREN,
+-                           0, 0, 300, 0,
++    return CreateWindowExW(0, mciWndClassW, NULL, dwStyle, 0, 0, 300, 0,
+                            hwndParent, 0, hInstance, (LPVOID)szFile);
+ }
+ 

@@ -1,0 +1,49 @@
+From: Eric Pouech <eric.pouech@gmail.com>
+Subject: [PATCH 1/4] programs/cmd: handle white space only lines within ( ) block
+Message-Id: <164139452620.97654.15454318558900380534.stgit@euterpe>
+Date: Wed,  5 Jan 2022 15:55:26 +0100
+In-Reply-To: <164139305597.97654.10505773825898841193.stgit@euterpe>
+References: <164139305597.97654.10505773825898841193.stgit@euterpe>
+
+Wine-bugs: https://bugs.winehq.org/show_bug.cgi?id=51599
+Signed-off-by: Eric Pouech <eric.pouech@gmail.com>
+
+---
+ programs/cmd/wcmdmain.c |    8 ++++++--
+ 1 file changed, 6 insertions(+), 2 deletions(-)
+
+diff --git a/programs/cmd/wcmdmain.c b/programs/cmd/wcmdmain.c
+index 675d7c5f464..45aec76c89c 100644
+--- a/programs/cmd/wcmdmain.c
++++ b/programs/cmd/wcmdmain.c
+@@ -1828,6 +1828,7 @@ WCHAR *WCMD_ReadAndParseLine(const WCHAR *optionalcmd, CMD_LIST **output, HANDLE
+     BOOL      lastWasCaret = FALSE;
+     BOOL      ignoreBracket = FALSE;         /* Some expressions after if (set) require */
+                                              /* handling brackets as a normal character */
++    BOOL      atEOF = FALSE;
+     int       lineCurDepth;                  /* Bracket depth when line was read in */
+     BOOL      resetAtEndOfLine = FALSE;      /* Do we need to reset curdepth at EOL */
+ 
+@@ -2278,8 +2279,8 @@ WCHAR *WCMD_ReadAndParseLine(const WCHAR *optionalcmd, CMD_LIST **output, HANDLE
+ 
+       /* If we have reached the end of the string, see if bracketing or
+          final caret is outstanding */
+-      if (*curPos == 0x00 && (curDepth > 0 || lastWasCaret) &&
+-          readFrom != INVALID_HANDLE_VALUE) {
++      while (*curPos == 0x00 && (curDepth > 0 || lastWasCaret) &&
++          readFrom != INVALID_HANDLE_VALUE && !atEOF) {
+         WCHAR *extraData;
+ 
+         WINE_TRACE("Need to read more data as outstanding brackets or carets\n");
+@@ -2294,7 +2295,10 @@ WCHAR *WCMD_ReadAndParseLine(const WCHAR *optionalcmd, CMD_LIST **output, HANDLE
+           WINE_TRACE("Read more input\n");
+           if (!context) WCMD_output_asis( WCMD_LoadMessage(WCMD_MOREPROMPT));
+           if (!WCMD_fgets(extraData, MAXSTRING, readFrom))
++          {
++            atEOF = TRUE;
+             break;
++          }
+ 
+           /* Edge case for carets - a completely blank line (i.e. was just
+              CRLF) is oddly added as an LF but then more data is received (but
+

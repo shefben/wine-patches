@@ -1,0 +1,24 @@
+From: Eric Pouech <eric.pouech@gmail.com>
+Subject: [PATCH] programs/msi: don't call RegCloseKey with uninitialized value
+Message-Id: <164240558303.6392.13500875001893206742.stgit@euterpe>
+Date: Mon, 17 Jan 2022 08:46:24 +0100
+
+Signed-off-by: Eric Pouech <eric.pouech@gmail.com>
+
+---
+ dlls/msi/action.c |    1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/dlls/msi/action.c b/dlls/msi/action.c
+index 9a47c2b068b..22f56a0c63f 100644
+--- a/dlls/msi/action.c
++++ b/dlls/msi/action.c
+@@ -7012,6 +7012,7 @@ static UINT ITERATE_RemoveEnvironmentString( MSIRECORD *rec, LPVOID param )
+         if (!deformatted)
+         {
+             res = ERROR_OUTOFMEMORY;
++            env = NULL;
+             goto done;
+         }
+ 
+

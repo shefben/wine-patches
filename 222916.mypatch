@@ -1,0 +1,33 @@
+From: Derek Lesho <dlesho@codeweavers.com>
+Subject: [PATCH 1/6] mf/samplegrabber: Always release cancellation key when timer is invoked.
+Message-Id: <20220104173527.77306-1-dlesho@codeweavers.com>
+Date: Tue,  4 Jan 2022 12:35:22 -0500
+
+The sample grabber currently leaks the key on the last invokation of the timer, as it is only released when stream_schedule_sample is called.
+
+Signed-off-by: Derek Lesho <dlesho@codeweavers.com>
+---
+ dlls/mf/samplegrabber.c | 6 ++++++
+ 1 file changed, 6 insertions(+)
+
+diff --git a/dlls/mf/samplegrabber.c b/dlls/mf/samplegrabber.c
+index e0287e1e1db..dd48973b7b6 100644
+--- a/dlls/mf/samplegrabber.c
++++ b/dlls/mf/samplegrabber.c
+@@ -729,6 +729,12 @@ static HRESULT WINAPI sample_grabber_stream_timer_callback_Invoke(IMFAsyncCallba
+ 
+     EnterCriticalSection(&grabber->cs);
+ 
++    if (grabber->cancel_key)
++    {
++        IUnknown_Release(grabber->cancel_key);
++        grabber->cancel_key = NULL;
++    }
++
+     LIST_FOR_EACH_ENTRY_SAFE(item, item2, &grabber->items, struct scheduled_item, entry)
+     {
+         if (item->type == ITEM_TYPE_MARKER)
+
+-- 
+2.33.1
+

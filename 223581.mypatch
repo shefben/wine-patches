@@ -1,0 +1,32 @@
+From: Jinoh Kang <jinoh.kang.kr@gmail.com>
+Subject: [PATCH 1/4] ntdll/unix: Zero-extend IP_TOS byte to INT.
+Message-Id: <a01b99bf-2c67-1216-e947-817b6247cb24@gmail.com>
+Date: Wed, 19 Jan 2022 04:27:37 +0900
+
+The IP_TOS control data is 1 byte on Unix, but 4 bytes on Windows.
+Properly zero-extend the value instead of copying 3 bytes of garbage.
+
+Signed-off-by: Jinoh Kang <jinoh.kang.kr@gmail.com>
+---
+ dlls/ntdll/unix/socket.c | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/dlls/ntdll/unix/socket.c b/dlls/ntdll/unix/socket.c
+index f82c7ae1ddf..71dfcdd1114 100644
+--- a/dlls/ntdll/unix/socket.c
++++ b/dlls/ntdll/unix/socket.c
+@@ -429,8 +429,9 @@ static int convert_control_headers(struct msghdr *hdr, WSABUF *control)
+ #if defined(IP_TOS)
+                     case IP_TOS:
+                     {
++                        INT tos = *(unsigned char *)CMSG_DATA(cmsg_unix);
+                         ptr = fill_control_message( WS_IPPROTO_IP, WS_IP_TOS, ptr, &ctlsize,
+-                                                    CMSG_DATA(cmsg_unix), sizeof(INT) );
++                                                    &tos, sizeof(INT) );
+                         if (!ptr) goto error;
+                         break;
+                     }
+
+-- 
+2.31.1
+

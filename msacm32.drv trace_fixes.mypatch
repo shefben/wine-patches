@@ -1,0 +1,58 @@
+diff --git a/dlls/msacm32.drv/wavemap.c b/dlls/msacm32.drv/wavemap.c
+index bb51e22..609121e 100755
+--- a/dlls/msacm32.drv/wavemap.c    
++++ b/dlls/msacm32.drv/wavemap.c
+@@ -80,7 +80,7 @@ static void CALLBACK wodCallback(HWAVEOUT hWave, UINT uMsg, DWORD_PTR dwInstance
+ {
+     WAVEMAPDATA*       wom = (WAVEMAPDATA*)dwInstance;
+ 
+-    TRACE("(%p %u %ld %lx %lx);\n", hWave, uMsg, dwInstance, dwParam1, dwParam2);
++    TRACE("(%p %u %llu %llux %llux);\n", hWave, uMsg, dwInstance, dwParam1, dwParam2);
+ 
+     if (!WAVEMAP_IsData(wom)) {
+        ERR("Bad data\n");
+@@ -615,7 +615,7 @@ static  DWORD   wodMapperReconfigure(WAVEMAPDATA* wom, DWORD dwParam1, DWORD dwP
+ DWORD WINAPI WAVEMAP_wodMessage(UINT wDevID, UINT wMsg, DWORD_PTR dwUser,
+                                 DWORD_PTR dwParam1, DWORD_PTR dwParam2)
+ {
+-    TRACE("(%u, %04X, %08lX, %08lX, %08lX);\n",
++    TRACE("(%u, %04X, %08lluX, %08lluX, %08lluX);\n",
+          wDevID, wMsg, dwUser, dwParam1, dwParam2);
+ 
+     switch (wMsg) {
+@@ -664,7 +664,7 @@ static void CALLBACK widCallback(HWAVEIN hWave, UINT uMsg, DWORD_PTR dwInstance,
+ {
+     WAVEMAPDATA* wim = (WAVEMAPDATA*)dwInstance;
+ 
+-    TRACE("(%p %u %lx %lx %lx);\n", hWave, uMsg, dwInstance, dwParam1, dwParam2);
++    TRACE("(%p %u %llux %llux %llux);\n", hWave, uMsg, dwInstance, dwParam1, dwParam2);
+ 
+     if (!WAVEMAP_IsData(wim)) {
+        ERR("Bad data\n");
+@@ -1144,7 +1144,7 @@ static  DWORD   widMapperReconfigure(WAVEMAPDATA* wim, DWORD dwParam1, DWORD dwP
+ DWORD WINAPI WAVEMAP_widMessage(WORD wDevID, WORD wMsg, DWORD_PTR dwUser,
+                                 DWORD_PTR dwParam1, DWORD_PTR dwParam2)
+ {
+-    TRACE("(%u, %04X, %08lX, %08lX, %08lX);\n",
++    TRACE("(%u, %04X, %08lluX, %08lluX, %08lluX);\n",
+          wDevID, wMsg, dwUser, dwParam1, dwParam2);
+ 
+     switch (wMsg) {
+@@ -1205,7 +1205,7 @@ static LRESULT WAVEMAP_drvOpen(LPSTR str)
+  */
+ static LRESULT WAVEMAP_drvClose(DWORD_PTR dwDevID)
+ {
+-    TRACE("(%08lx)\n", dwDevID);
++    TRACE("(%08llux)\n", dwDevID);
+ 
+     if (oss) {
+        oss = NULL;
+@@ -1220,7 +1220,7 @@ static LRESULT WAVEMAP_drvClose(DWORD_PTR dwDevID)
+ LRESULT CALLBACK WAVEMAP_DriverProc(DWORD_PTR dwDevID, HDRVR hDriv, UINT wMsg,
+                                     LPARAM dwParam1, LPARAM dwParam2)
+ {
+-    TRACE("(%08lX, %p, %08X, %08lX, %08lX)\n",
++    TRACE("(%08lluX, %p, %08X, %08lldX, %08lldX)\n",
+          dwDevID, hDriv, wMsg, dwParam1, dwParam2);
+ 
+     switch(wMsg) {

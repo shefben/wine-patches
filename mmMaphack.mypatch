@@ -1,0 +1,84 @@
+diff --git a/dlls/ntoskrnl.exe/ntoskrnl.c b/dlls/ntoskrnl.exe/ntoskrnl.c
+index 17a0d39..48ccf8f 100644
+--- a/dlls/ntoskrnl.exe/ntoskrnl.c
++++ b/dlls/ntoskrnl.exe/ntoskrnl.c
+@@ -1522,11 +1523,46 @@ VOID WINAPI MmLockPagableSectionByHandle(PVOID ImageSectionHandle)
+ /***********************************************************************
+  *           MmMapLockedPagesSpecifyCache  (NTOSKRNL.EXE.@)
+  */
+-PVOID WINAPI  MmMapLockedPagesSpecifyCache(PMDLX MemoryDescriptorList, KPROCESSOR_MODE AccessMode, MEMORY_CACHING_TYPE CacheType,
++PVOID WINAPI  MmMapLockedPagesSpecifyCache(PMDLX mdl, KPROCESSOR_MODE AccessMode, MEMORY_CACHING_TYPE CacheType,
+                                            PVOID BaseAddress, ULONG BugCheckOnFailure, MM_PAGE_PRIORITY Priority)
+ {
+-    FIXME("(%p, %u, %u, %p, %u, %u): stub\n", MemoryDescriptorList, AccessMode, CacheType, BaseAddress, BugCheckOnFailure, Priority);
++    PVOID *addr;
++    HANDLE hProcess = NULL;
++    PVOID* storeAddr;
++
++    FIXME("(%p, %u, %u, %p, %u, %u): stub\n", mdl, AccessMode, CacheType, BaseAddress, BugCheckOnFailure, Priority);
++
++    if (!mdl)
++        return NULL;
++
++    if (AccessMode)
++    {
++        FIXME("User mode mapping not supported!\n");
++        return NULL;
++    }
++
++    addr = HeapAlloc(GetProcessHeap(), 0, mdl->ByteCount);
++    if (!addr) return NULL;
++
++    hProcess = OpenProcess(PROCESS_ALL_ACCESS, FALSE, (DWORD) mdl->Process);
++    if (!hProcess) goto out;
+ 
++    if (!ReadProcessMemory(hProcess, (char*)mdl->StartVa + mdl->ByteOffset, addr, mdl->ByteCount, NULL))
++        goto out;
++
++    /* save pointer after the structure */
++    storeAddr = (PVOID*)((char*) mdl + sizeof(MDL));
++    *storeAddr = addr;
++
++    CloseHandle(hProcess);
++    FIXME("Success!\n");
++
++    return addr;
++
++out:
++    FIXME("FAILURE!\n");
++    HeapFree(GetProcessHeap(), 0, addr);
++    if (hProcess) CloseHandle(hProcess);
+     return NULL;
+ }
+ 
+@@ -1569,9 +1605,28 @@ void WINAPI MmResetDriverPaging(PVOID AddrInSection)
+ /***********************************************************************
+  *           MmUnlockPages  (NTOSKRNL.EXE.@)
+  */
+-void WINAPI  MmUnlockPages(PMDLX MemoryDescriptorList)
++void WINAPI  MmUnlockPages(PMDLX mdl)
+ {
+-    FIXME("(%p): stub\n", MemoryDescriptorList);
++    PVOID *addr;
++    HANDLE hProcess;
++    PVOID* storeAddr = (PVOID*) ((char*)mdl + sizeof(MDL));
++
++    FIXME("(%p): stub\n", mdl);
++
++    addr = *storeAddr;
++    if (!addr) return;
++
++    hProcess = OpenProcess(PROCESS_ALL_ACCESS, FALSE, (DWORD) mdl->Process);
++    if (hProcess)
++    {
++        WriteProcessMemory(hProcess, (char*)mdl->StartVa + mdl->ByteOffset, addr, mdl->ByteCount, NULL);
++        CloseHandle(hProcess);
++    }
++
++    HeapFree(GetProcessHeap(), 0, addr);
++    *storeAddr = NULL;
++
++    FIXME("Success!\n");
+ }
+ 
+ 

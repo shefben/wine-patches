@@ -1,0 +1,39 @@
+From: Derek Lesho <dlesho@codeweavers.com>
+Subject: [PATCH 6/6] rtworkq: Fix reference leak when canceling waiting work items.
+Message-Id: <20220104173527.77306-6-dlesho@codeweavers.com>
+Date: Tue,  4 Jan 2022 12:35:27 -0500
+In-Reply-To: <20220104173527.77306-1-dlesho@codeweavers.com>
+References: <20220104173527.77306-1-dlesho@codeweavers.com>
+
+A waiting work_item has two references, the initial reference from creation, and an additional reference associated with its presence pending_items list, freed through queue_release_pending_item.  RtwqCancelWorkItem only releases the second reference.
+
+Signed-off-by: Derek Lesho <dlesho@codeweavers.com>
+---
+ dlls/rtworkq/queue.c | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/dlls/rtworkq/queue.c b/dlls/rtworkq/queue.c
+index 58769a0be04..f77f2a602ca 100644
+--- a/dlls/rtworkq/queue.c
++++ b/dlls/rtworkq/queue.c
+@@ -866,6 +866,7 @@ static HRESULT queue_cancel_item(struct queue *queue, RTWQWORKITEM_KEY key)
+         if (item->key == key)
+         {
+             key >>= 32;
++            queue_release_pending_item(item);
+             if ((key & WAIT_ITEM_KEY_MASK) == WAIT_ITEM_KEY_MASK)
+             {
+                 IRtwqAsyncResult_SetStatus(item->result, RTWQ_E_OPERATION_CANCELLED);
+@@ -876,7 +877,7 @@ static HRESULT queue_cancel_item(struct queue *queue, RTWQWORKITEM_KEY key)
+                 CloseThreadpoolTimer(item->u.timer_object);
+             else
+                 WARN("Unknown item key mask %#x.\n", (DWORD)key);
+-            queue_release_pending_item(item);
++            IUnknown_Release(&item->IUnknown_iface);
+             hr = S_OK;
+             break;
+         }
+
+-- 
+2.33.1
+

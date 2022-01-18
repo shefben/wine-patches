@@ -1,0 +1,155 @@
+diff --git a/dlls/msacm32/pcmconverter.c b/dlls/msacm32/pcmconverter.c
+index d528a6d..c66cf48 100755
+--- a/dlls/msacm32/pcmconverter.c   
++++ b/dlls/msacm32/pcmconverter.c
+@@ -1325,7 +1325,7 @@ static LRESULT PCM_StreamConvert(PACMDRVSTREAMINSTANCE adsi, PACMDRVSTREAMHEADER
+ LRESULT CALLBACK PCM_DriverProc(DWORD_PTR dwDevID, HDRVR hDriv, UINT wMsg,
+                                       LPARAM dwParam1, LPARAM dwParam2)
+ {
+-    TRACE("(%08lx %p %u %08lx %08lx);\n",
++    TRACE("(%08lx %p %u %08lldx %08lldx);\n",
+           dwDevID, hDriv, wMsg, dwParam1, dwParam2);
+ 
+     switch (wMsg) {
+diff --git a/dlls/msacm32/stream.c b/dlls/msacm32/stream.c
+index e06503a..0a231ed 100755
+--- a/dlls/msacm32/stream.c 
++++ b/dlls/msacm32/stream.c
+@@ -138,7 +138,7 @@ MMRESULT WINAPI acmStreamConvert(HACMSTREAM has, PACMSTREAMHEADER pash,
+ MMRESULT WINAPI acmStreamMessage(HACMSTREAM has, UINT uMsg, LPARAM lParam1,
+                                 LPARAM lParam2)
+ {
+-    FIXME("(%p, %u, %ld, %ld): stub\n", has, uMsg, lParam1, lParam2);
++    FIXME("(%p, %u, %lld, %lld): stub\n", has, uMsg, lParam1, lParam2);
+     SetLastError(ERROR_CALL_NOT_IMPLEMENTED);
+     return MMSYSERR_ERROR;
+ }
+@@ -158,7 +158,7 @@ MMRESULT WINAPI acmStreamOpen(PHACMSTREAM phas, HACMDRIVER had,
+     int                        wfxDstSize;
+     WAVEFORMATEX       wfxSrc, wfxDst;
+ 
+-    TRACE("(%p, %p, %p, %p, %p, %ld, %ld, %d)\n",
++    TRACE("(%p, %p, %p, %p, %p, %llud, %llud, %d)\n",
+          phas, had, pwfxSrc, pwfxDst, pwfltr, dwCallback, dwInstance, fdwOpen);
+ 
+     /* NOTE: pwfxSrc and/or pwfxDst can point to a structure smaller than
+diff --git a/dlls/msacm32/driver.c b/dlls/msacm32/driver.c
+index 1be3b52..c89ea84 100755
+--- a/dlls/msacm32/driver.c 
++++ b/dlls/msacm32/driver.c
+@@ -49,7 +49,7 @@ MMRESULT WINAPI acmDriverAddA(PHACMDRIVERID phadid, HINSTANCE hinstModule,
+     WCHAR * driverW = NULL;
+     LPARAM lParamW = lParam;
+ 
+-    TRACE("(%p, %p, %08lx, %08x, %08x)\n",
++    TRACE("(%p, %p, %08lldx, %08x, %08x)\n",
+           phadid, hinstModule, lParam, dwPriority, fdwAdd);
+ 
+     if (!phadid) {
+@@ -98,7 +98,7 @@ MMRESULT WINAPI acmDriverAddW(PHACMDRIVERID phadid, HINSTANCE hinstModule,
+ {
+     PWINE_ACMLOCALDRIVER pLocalDrv = NULL;
+ 
+-    TRACE("(%p, %p, %08lx, %08x, %08x)\n",
++    TRACE("(%p, %p, %08lldx, %08x, %08x)\n",
+           phadid, hinstModule, lParam, dwPriority, fdwAdd);
+ 
+     if (!phadid) {
+@@ -318,7 +318,7 @@ MMRESULT WINAPI acmDriverEnum(ACMDRIVERENUMCB fnCallback, DWORD_PTR dwInstance,
+     PWINE_ACMDRIVERID  padid;
+     DWORD              fdwSupport;
+ 
+-    TRACE("(%p, %08lx, %08x)\n", fnCallback, dwInstance, fdwEnum);
++    TRACE("(%p, %08llux, %08x)\n", fnCallback, dwInstance, fdwEnum);
+ 
+     if (!fnCallback) {
+         WARN("invalid parameter\n");
+@@ -391,7 +391,7 @@ MMRESULT WINAPI acmDriverID(HACMOBJ hao, PHACMDRIVERID phadid, DWORD fdwDriverID
+  */
+ LRESULT WINAPI acmDriverMessage(HACMDRIVER had, UINT uMsg, LPARAM lParam1, LPARAM lParam2)
+ {
+-    TRACE("(%p, %04x, %08lx, %08lx\n", had, uMsg, lParam1, lParam2);
++    TRACE("(%p, %04x, %08lldx, %08lldx\n", had, uMsg, lParam1, lParam2);
+ 
+     if ((uMsg >= ACMDM_USER && uMsg < ACMDM_RESERVED_LOW) ||
+        uMsg == ACMDM_DRIVER_ABOUT ||
+diff --git a/dlls/msacm32/format.c b/dlls/msacm32/format.c
+index 536fa42..6da6aaa 100755
+--- a/dlls/msacm32/format.c 
++++ b/dlls/msacm32/format.c
+@@ -217,7 +217,7 @@ static INT_PTR CALLBACK FormatChooseDlgProc(HWND hWnd, UINT msg,
+ {
+     ACMFORMATCHOOSEW *afc = (ACMFORMATCHOOSEW *)GetPropW(hWnd, L"acmprop");
+ 
+-    TRACE("hwnd=%p msg=%i 0x%08lx 0x%08lx\n", hWnd, msg, wParam, lParam);
++    TRACE("hwnd=%p msg=%i 0x%08llux 0x%08lldx\n", hWnd, msg, wParam, lParam);
+ 
+     switch (msg) {
+     case WM_INITDIALOG:
+@@ -249,7 +249,7 @@ static INT_PTR CALLBACK FormatChooseDlgProc(HWND hWnd, UINT msg,
+                MSACM_FillFormat(hWnd, afc);
+                break;
+            default:
+-               TRACE("Dropped dlgNotif (fmtTag): 0x%08x 0x%08lx\n",
++               TRACE("Dropped dlgNotif (fmtTag): 0x%08llux 0x%08lldx\n",
+                      HIWORD(wParam), lParam);
+                break;
+            }
+@@ -261,7 +261,7 @@ static INT_PTR CALLBACK FormatChooseDlgProc(HWND hWnd, UINT msg,
+            break;
+ 
+        default:
+-           TRACE("Dropped dlgCmd: ctl=%d ntf=0x%04x 0x%08lx\n",
++           TRACE("Dropped dlgCmd: ctl=%llu ntf=0x%04llux 0x%08lldx\n",
+                  LOWORD(wParam), HIWORD(wParam), lParam);
+            break;
+        }
+@@ -281,7 +281,7 @@ static INT_PTR CALLBACK FormatChooseDlgProc(HWND hWnd, UINT msg,
+        break;
+ #endif
+     default:
+-       TRACE("Dropped dlgMsg: hwnd=%p msg=%i 0x%08lx 0x%08lx\n",
++       TRACE("Dropped dlgMsg: hwnd=%p msg=%i 0x%08llux 0x%08lldx\n",
+              hWnd,  msg, wParam, lParam );
+        break;
+     }
+@@ -673,7 +673,7 @@ MMRESULT WINAPI acmFormatEnumW(HACMDRIVER had, PACMFORMATDETAILSW pafd,
+     DWORD                      cbwfxMax;
+     MMRESULT                   mmr;
+ 
+-    TRACE("(%p, %p, %p, %ld, %d)\n",
++    TRACE("(%p, %p, %p, %llu, %d)\n",
+          had, pafd, fnCallback, dwInstance, fdwEnum);
+ 
+     if (!pafd)
+@@ -999,7 +999,7 @@ MMRESULT WINAPI acmFormatTagEnumW(HACMDRIVER had, PACMFORMATTAGDETAILSW paftd,
+     unsigned int        i;
+     BOOL                bPcmDone = FALSE;
+ 
+-    TRACE("(%p, %p, %p, %ld, %d)\n",
++    TRACE("(%p, %p, %p, %llu, %d)\n",
+           had, paftd, fnCallback, dwInstance, fdwEnum);
+ 
+     if (!paftd)
+diff --git a/dlls/msacm32/filter.c b/dlls/msacm32/filter.c
+index 8d5abce..8c65324 100755
+--- a/dlls/msacm32/filter.c 
++++ b/dlls/msacm32/filter.c
+@@ -228,7 +228,7 @@ MMRESULT WINAPI acmFilterEnumW(HACMDRIVER had, PACMFILTERDETAILSW pafd,
+     PWINE_ACMDRIVERID          padid;
+     BOOL                       ret;
+ 
+-    TRACE("(%p, %p, %p, %ld, %d)\n",
++    TRACE("(%p, %p, %p, %llu, %d)\n",
+          had, pafd, fnCallback, dwInstance, fdwEnum);
+ 
+     if (pafd->cbStruct < sizeof(*pafd)) return MMSYSERR_INVALPARAM;
+@@ -427,7 +427,7 @@ MMRESULT WINAPI acmFilterTagEnumW(HACMDRIVER had, PACMFILTERTAGDETAILSW paftd,
+     PWINE_ACMDRIVERID          padid;
+     unsigned int                       i;
+ 
+-    TRACE("(%p, %p, %p, %ld, %d)\n",
++    TRACE("(%p, %p, %p, %llu, %d)\n",
+          had, paftd, fnCallback, dwInstance, fdwEnum);
+ 
+     if (paftd->cbStruct < sizeof(*paftd)) return MMSYSERR_INVALPARAM;

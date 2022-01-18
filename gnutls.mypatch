@@ -1,0 +1,15 @@
+diff --git a/dlls/bcrypt/gnutls.c b/dlls/bcrypt/gnutls.c
+--- a/dlls/bcrypt/gnutls.c  
++++ b/dlls/bcrypt/gnutls.c
+@@ -1092,9 +1092,9 @@ static NTSTATUS CDECL key_dh_generate( struct key *key )
+         pgnutls_dh_params_deinit( dh_params );
+ 
+ 
+-        export_gnutls_datum( (UCHAR *)((BCRYPT_DH_KEY_BLOB *)key->u.a.pubkey + 1), key_length, &prime, NULL );
++        export_gnutls_datum( (UCHAR *)((BCRYPT_DH_KEY_BLOB *)key->u.a.pubkey + 1), key_length, &prime, 0 );
+         export_gnutls_datum( (UCHAR *)((BCRYPT_DH_KEY_BLOB *)key->u.a.pubkey + 1) + key_length,
+-                key_length, &generator, NULL );
++                key_length, &generator, 0 );
+         free( prime.data );
+         free( generator.data );
+ 

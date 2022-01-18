@@ -1,0 +1,27 @@
+From: "André Zwing" <nerv@dawncrow.de>
+Subject: [PATCH 1/7] mfplat: Remove duplicated space in spec
+Message-Id: <20220107201654.504763-1-nerv@dawncrow.de>
+Date: Fri,  7 Jan 2022 21:16:48 +0100
+
+Signed-off-by: André Zwing <nerv@dawncrow.de>
+---
+ dlls/mfplat/mfplat.spec | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/dlls/mfplat/mfplat.spec b/dlls/mfplat/mfplat.spec
+index 6cc3fb07105..61091a0d8a3 100644
+--- a/dlls/mfplat/mfplat.spec
++++ b/dlls/mfplat/mfplat.spec
+@@ -162,7 +162,7 @@
+ @ stdcall MFTEnumEx(int128 long ptr ptr ptr ptr)
+ @ stub MFTGetInfo
+ @ stdcall MFTRegister(int128 int128 wstr long long ptr long ptr ptr)
+-@ stdcall MFTRegisterLocal(ptr ptr wstr long long  ptr long ptr)
++@ stdcall MFTRegisterLocal(ptr ptr wstr long long ptr long ptr)
+ @ stdcall MFTRegisterLocalByCLSID(ptr ptr wstr long long ptr long ptr)
+ @ stdcall MFTUnregister(int128)
+ @ stdcall MFTUnregisterLocal(ptr)
+
+-- 
+2.25.1
+

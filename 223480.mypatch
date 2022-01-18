@@ -1,0 +1,56 @@
+From: "André Zwing" <nerv@dawncrow.de>
+Subject: [PATCH] ntdll: Fix some spec file entries
+Message-Id: <20220115135913.1042424-1-nerv@dawncrow.de>
+Date: Sat, 15 Jan 2022 14:59:13 +0100
+
+Signed-off-by: André Zwing <nerv@dawncrow.de>
+---
+ dlls/ntdll/ntdll.spec | 10 +++++-----
+ 1 file changed, 5 insertions(+), 5 deletions(-)
+
+diff --git a/dlls/ntdll/ntdll.spec b/dlls/ntdll/ntdll.spec
+index bd8e1f5efe6..0a710559efe 100644
+--- a/dlls/ntdll/ntdll.spec
++++ b/dlls/ntdll/ntdll.spec
+@@ -52,7 +52,7 @@
+ @ stdcall EtwEventSetInformation(int64 long ptr long)
+ @ stdcall EtwEventUnregister(int64)
+ @ stdcall EtwEventWrite(int64 ptr long ptr)
+-@ stdcall EtwEventWriteString(int64 long int64 ptr)
++@ stdcall EtwEventWriteString(int64 long int64 wstr)
+ @ stdcall EtwEventWriteTransfer(int64 ptr ptr ptr long ptr)
+ @ stdcall EtwGetTraceEnableFlags(int64)
+ @ stdcall EtwGetTraceEnableLevel(int64)
+@@ -594,7 +594,7 @@
+ @ stub RtlDeleteNoSplay
+ @ stub RtlDeleteOwnersRanges
+ @ stub RtlDeleteRange
+-@ stdcall RtlDeleteRegistryValue(long ptr ptr)
++@ stdcall RtlDeleteRegistryValue(long wstr wstr)
+ @ stdcall RtlDeleteResource(ptr)
+ @ stdcall RtlDeleteSecurityObject(ptr)
+ @ stdcall RtlDeleteTimer(ptr ptr ptr)
+@@ -913,8 +913,8 @@
+ @ stub RtlQueryProperties
+ @ stub RtlQueryPropertyNames
+ @ stub RtlQueryPropertySet
+-@ stdcall RtlQueryRegistryValues(long ptr ptr ptr ptr)
+-@ stdcall RtlQueryRegistryValuesEx(long ptr ptr ptr ptr) RtlQueryRegistryValues
++@ stdcall RtlQueryRegistryValues(long wstr ptr ptr ptr)
++@ stdcall RtlQueryRegistryValuesEx(long wstr ptr ptr ptr) RtlQueryRegistryValues
+ @ stub RtlQuerySecurityObject
+ @ stub RtlQueryTagHeap
+ @ stdcall RtlQueryTimeZoneInformation(ptr)
+@@ -1089,7 +1089,7 @@
+ @ stdcall RtlWow64IsWowGuestMachineSupported(long ptr)
+ @ stdcall -arch=win64 RtlWow64SetThreadContext(long ptr)
+ @ stub RtlWriteMemoryStream
+-@ stdcall RtlWriteRegistryValue(long ptr ptr long ptr long)
++@ stdcall RtlWriteRegistryValue(long wstr wstr long ptr long)
+ @ stub RtlZeroHeap
+ @ stdcall RtlZeroMemory(ptr long)
+ @ stdcall RtlZombifyActivationContext(ptr)
+
+-- 
+2.25.1
+

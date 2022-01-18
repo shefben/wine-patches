@@ -1,0 +1,61 @@
+From: Andrey Gusev <andrey.goosev@gmail.com>
+Subject: [PATCH] api-ms-win-security-lsalookup-ansi-l2-1-0: Add dll.
+Message-Id: <20220112165737.41933-1-andrey.goosev@gmail.com>
+Date: Wed, 12 Jan 2022 18:57:37 +0200
+
+Signed-off-by: Andrey Gusev <andrey.goosev@gmail.com>
+---
+ configure.ac                                                 | 1 +
+ dlls/api-ms-win-security-lsalookup-ansi-l2-1-0/Makefile.in   | 1 +
+ .../api-ms-win-security-lsalookup-ansi-l2-1-0.spec           | 5 +++++
+ tools/make_specfiles                                         | 1 +
+ 4 files changed, 8 insertions(+)
+ create mode 100644 dlls/api-ms-win-security-lsalookup-ansi-l2-1-0/Makefile.in
+ create mode 100644 dlls/api-ms-win-security-lsalookup-ansi-l2-1-0/api-ms-win-security-lsalookup-ansi-l2-1-0.spec
+
+diff --git a/configure.ac b/configure.ac
+index b42cb8a5346..712e3b9b06c 100644
+--- a/configure.ac
++++ b/configure.ac
+@@ -2545,6 +2545,7 @@ WINE_CONFIG_MAKEFILE(dlls/api-ms-win-security-base-private-l1-1-1)
+ WINE_CONFIG_MAKEFILE(dlls/api-ms-win-security-credentials-l1-1-0)
+ WINE_CONFIG_MAKEFILE(dlls/api-ms-win-security-cryptoapi-l1-1-0)
+ WINE_CONFIG_MAKEFILE(dlls/api-ms-win-security-grouppolicy-l1-1-0)
++WINE_CONFIG_MAKEFILE(dlls/api-ms-win-security-lsalookup-ansi-l2-1-0)
+ WINE_CONFIG_MAKEFILE(dlls/api-ms-win-security-lsalookup-l1-1-0)
+ WINE_CONFIG_MAKEFILE(dlls/api-ms-win-security-lsalookup-l1-1-1)
+ WINE_CONFIG_MAKEFILE(dlls/api-ms-win-security-lsalookup-l2-1-0)
+diff --git a/dlls/api-ms-win-security-lsalookup-ansi-l2-1-0/Makefile.in b/dlls/api-ms-win-security-lsalookup-ansi-l2-1-0/Makefile.in
+new file mode 100644
+index 00000000000..3a880198bd7
+--- /dev/null
++++ b/dlls/api-ms-win-security-lsalookup-ansi-l2-1-0/Makefile.in
+@@ -0,0 +1 @@
++MODULE    = api-ms-win-security-lsalookup-ansi-l2-1-0.dll
+diff --git a/dlls/api-ms-win-security-lsalookup-ansi-l2-1-0/api-ms-win-security-lsalookup-ansi-l2-1-0.spec b/dlls/api-ms-win-security-lsalookup-ansi-l2-1-0/api-ms-win-security-lsalookup-ansi-l2-1-0.spec
+new file mode 100644
+index 00000000000..9881da665da
+--- /dev/null
++++ b/dlls/api-ms-win-security-lsalookup-ansi-l2-1-0/api-ms-win-security-lsalookup-ansi-l2-1-0.spec
+@@ -0,0 +1,5 @@
++@ stdcall LookupAccountNameA(str str ptr ptr ptr ptr ptr) advapi32.LookupAccountNameA
++@ stdcall LookupAccountSidA(ptr ptr ptr ptr ptr ptr ptr) advapi32.LookupAccountSidA
++@ stdcall LookupPrivilegeDisplayNameA(str str str ptr ptr) advapi32.LookupPrivilegeDisplayNameA
++@ stdcall LookupPrivilegeNameA(str ptr ptr ptr) advapi32.LookupPrivilegeNameA
++@ stdcall LookupPrivilegeValueA(ptr ptr ptr) advapi32.LookupPrivilegeValueA
+diff --git a/tools/make_specfiles b/tools/make_specfiles
+index b5e6443dd3c..594e01396db 100755
+--- a/tools/make_specfiles
++++ b/tools/make_specfiles
+@@ -137,6 +137,7 @@ my @dll_groups =
+   "api-ms-win-security-base-private-l1-1-1",
+   "api-ms-win-security-credentials-l1-1-0",
+   "api-ms-win-security-cryptoapi-l1-1-0",
++  "api-ms-win-security-lsalookup-ansi-l2-1-0",
+   "api-ms-win-security-lsalookup-l1-1-0",
+   "api-ms-win-security-lsalookup-l1-1-1",
+   "api-ms-win-security-lsalookup-l2-1-0",
+
+-- 
+2.34.1
+

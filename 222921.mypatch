@@ -1,0 +1,35 @@
+From: Derek Lesho <dlesho@codeweavers.com>
+Subject: [PATCH 2/6] mf/samplegrabber: Implement ::ShutdownObject for sample grabber actvation object.
+Message-Id: <20220104173527.77306-2-dlesho@codeweavers.com>
+Date: Tue,  4 Jan 2022 12:35:23 -0500
+In-Reply-To: <20220104173527.77306-1-dlesho@codeweavers.com>
+References: <20220104173527.77306-1-dlesho@codeweavers.com>
+
+Signed-off-by: Derek Lesho <dlesho@codeweavers.com>
+---
+ dlls/mf/samplegrabber.c | 8 ++++++++
+ 1 file changed, 8 insertions(+)
+
+diff --git a/dlls/mf/samplegrabber.c b/dlls/mf/samplegrabber.c
+index dd48973b7b6..086abcb0f9f 100644
+--- a/dlls/mf/samplegrabber.c
++++ b/dlls/mf/samplegrabber.c
+@@ -1458,6 +1458,14 @@ failed:
+ static void sample_grabber_shutdown_object(void *user_context, IUnknown *obj)
+ {
+     struct sample_grabber_activate_context *context = user_context;
++    IMFMediaSink *sink;
++
++    if (SUCCEEDED(IUnknown_QueryInterface(obj, &IID_IMFMediaSink, (void **)&sink)))
++    {
++        IMFMediaSink_Shutdown(sink);
++        IMFMediaSink_Release(sink);
++    }
++
+     context->shut_down = TRUE;
+ }
+ 
+
+-- 
+2.33.1
+

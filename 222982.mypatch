@@ -1,0 +1,41 @@
+From: Eric Pouech <eric.pouech@gmail.com>
+Subject: [PATCH] programs/cmd: expand commandline before starting parsing it
+Message-Id: <164139628914.102193.4128614868555277787.stgit@euterpe>
+Date: Wed,  5 Jan 2022 16:24:50 +0100
+
+Wine-Bug: https://bugs.winehq.org/show_bug.cgi?id=52344
+Signed-off-by: Eric Pouech <eric.pouech@gmail.com>
+
+---
+ programs/cmd/wcmdmain.c |   10 +++++-----
+ 1 file changed, 5 insertions(+), 5 deletions(-)
+
+diff --git a/programs/cmd/wcmdmain.c b/programs/cmd/wcmdmain.c
+index 45aec76c89c..bb4661697c4 100644
+--- a/programs/cmd/wcmdmain.c
++++ b/programs/cmd/wcmdmain.c
+@@ -1297,6 +1297,11 @@ void WCMD_execute (const WCHAR *command, const WCHAR *redirects,
+     new_redir = heap_xalloc(MAXSTRING * sizeof(WCHAR));
+     redir = new_redir;
+ 
++    /* Expand variables in command line mode only (batch mode will
++       be expanded as the line is read in, except for 'for' loops) */
++    handleExpansion(new_cmd, (context != NULL), delayedsubst);
++    handleExpansion(new_redir, (context != NULL), delayedsubst);
++
+     /* Strip leading whitespaces, and a '@' if supplied */
+     whichcmd = WCMD_skip_leading_spaces(cmd);
+     WINE_TRACE("Command: '%s'\n", wine_dbgstr_w(cmd));
+@@ -1347,11 +1352,6 @@ void WCMD_execute (const WCHAR *command, const WCHAR *redirects,
+         lstrcpyW(new_redir, redirects);
+     }
+ 
+-    /* Expand variables in command line mode only (batch mode will
+-       be expanded as the line is read in, except for 'for' loops) */
+-    handleExpansion(new_cmd, (context != NULL), delayedsubst);
+-    handleExpansion(new_redir, (context != NULL), delayedsubst);
+-
+ /*
+  * Changing default drive has to be handled as a special case, anything
+  * else if it exists after whitespace is ignored
+

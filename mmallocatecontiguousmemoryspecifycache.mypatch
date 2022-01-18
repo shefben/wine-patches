@@ -1,0 +1,41 @@
+Wine-bug: https://bugs.winehq.org/show_bug.cgi?id=46760
+This let`s Nox player run tiny bit further to run into another unimplemented function .....
+
+Signed-off-by: Louis Lenders <xerox.xerox2000x at gmail.com>
+---
+ dlls/ntoskrnl.exe/ntoskrnl.c | 20 ++++++++++++++++++--
+ 1 file changed, 18 insertions(+), 2 deletions(-)
+
+diff --git a/dlls/ntoskrnl.exe/ntoskrnl.c b/dlls/ntoskrnl.exe/ntoskrnl.c
+index 77a610d7db..67e8bd38b9 100644
+--- a/dlls/ntoskrnl.exe/ntoskrnl.c
++++ b/dlls/ntoskrnl.exe/ntoskrnl.c
+@@ -2665,8 +2665,24 @@ PVOID WINAPI MmAllocateContiguousMemorySpecifyCache( SIZE_T size,
+                                                      PHYSICAL_ADDRESS BoundaryAddressMultiple,
+                                                      MEMORY_CACHING_TYPE CacheType )
+ {
+-    FIXME(": stub\n");
+-    return NULL;
++    DWORD protect;
++
++    FIXME( "%lu, %s %s %s %d stub\n", size, wine_dbgstr_longlong(lowest_valid_address.QuadPart),
++                                            wine_dbgstr_longlong(highest_valid_address.QuadPart),
++                                            wine_dbgstr_longlong(BoundaryAddressMultiple.QuadPart), CacheType );
++
++    protect = PAGE_READWRITE;
++
++    switch( CacheType )
++    {
++    case MmNonCached:
++        protect |= PAGE_NOCACHE;
++        break;
++    default:
++        break;
++    }
++
++    return VirtualAlloc( NULL, size, MEM_RESERVE|MEM_COMMIT, protect );
+ }
+ 
+ /***********************************************************************
+-- 
+2.20.1

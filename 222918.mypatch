@@ -1,0 +1,66 @@
+From: Derek Lesho <dlesho@codeweavers.com>
+Subject: [PATCH 4/6] mf/topology: Fix various simple reference counting leaks in the topology loader.
+Message-Id: <20220104173527.77306-4-dlesho@codeweavers.com>
+Date: Tue,  4 Jan 2022 12:35:25 -0500
+In-Reply-To: <20220104173527.77306-1-dlesho@codeweavers.com>
+References: <20220104173527.77306-1-dlesho@codeweavers.com>
+
+Signed-off-by: Derek Lesho <dlesho@codeweavers.com>
+---
+ dlls/mf/topology.c | 11 ++++++++++-
+ 1 file changed, 10 insertions(+), 1 deletion(-)
+
+diff --git a/dlls/mf/topology.c b/dlls/mf/topology.c
+index 34459912fb0..a92d7478440 100644
+--- a/dlls/mf/topology.c
++++ b/dlls/mf/topology.c
+@@ -2358,6 +2358,7 @@ static HRESULT topology_loader_resolve_branch(struct topoloader_context *context
+     };
+     MF_TOPOLOGY_TYPE u_type, d_type;
+     IMFTopologyNode *node;
++    HRESULT hr;
+     TOPOID id;
+ 
+     /* Downstream node might have already been cloned. */
+@@ -2371,10 +2372,13 @@ static HRESULT topology_loader_resolve_branch(struct topoloader_context *context
+     if (!connectors[u_type][d_type])
+     {
+         WARN("Unsupported branch kind %d -> %d.\n", u_type, d_type);
++        IMFTopologyNode_Release(node);
+         return E_FAIL;
+     }
+ 
+-    return connectors[u_type][d_type](context, upstream_node, output_index, node, input_index);
++    hr = connectors[u_type][d_type](context, upstream_node, output_index, node, input_index);
++    IMFTopologyNode_Release(node);
++    return hr;
+ }
+ 
+ static HRESULT topology_loader_resolve_nodes(struct topoloader_context *context, unsigned int *layer_size)
+@@ -2398,10 +2402,13 @@ static HRESULT topology_loader_resolve_nodes(struct topoloader_context *context,
+                 if (FAILED(IMFTopologyNode_GetOutput(orig_node, 0, &downstream_node, &input_index)))
+                 {
+                     IMFTopology_RemoveNode(context->output_topology, node);
++                    IMFTopologyNode_Release(orig_node);
++                    IMFTopologyNode_Release(node);
+                     continue;
+                 }
+ 
+                 hr = topology_loader_resolve_branch(context, node, 0, downstream_node, input_index);
++                IMFTopologyNode_Release(downstream_node);
+                 break;
+             case MF_TOPOLOGY_TRANSFORM_NODE:
+             case MF_TOPOLOGY_TEE_NODE:
+@@ -2412,6 +2419,8 @@ static HRESULT topology_loader_resolve_nodes(struct topoloader_context *context,
+         }
+ 
+         IMFTopologyNode_DeleteItem(node, &context->key);
++        IMFTopologyNode_Release(orig_node);
++        IMFTopologyNode_Release(node);
+ 
+         if (FAILED(hr))
+             break;
+
+-- 
+2.33.1
+

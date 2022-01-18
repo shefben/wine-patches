@@ -1,0 +1,32 @@
+From: Hans Leidekker <hans@codeweavers.com>
+Subject: [PATCH v2] msi: Don't call RegCloseKey with uninitialized value.
+Message-Id: <20220117094621.1658978-1-hans@codeweavers.com>
+Date: Mon, 17 Jan 2022 10:46:21 +0100
+
+From: Eric Pouech <eric.pouech@gmail.com>
+
+v2: Initialize variable when declared.
+
+Signed-off-by: Eric Pouech <eric.pouech@gmail.com>
+Signed-off-by: Hans Leidekker <hans@codeweavers.com>
+---
+ dlls/msi/action.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/dlls/msi/action.c b/dlls/msi/action.c
+index 9a47c2b068b..8ee9420af55 100644
+--- a/dlls/msi/action.c
++++ b/dlls/msi/action.c
+@@ -6973,7 +6973,7 @@ static UINT ITERATE_RemoveEnvironmentString( MSIRECORD *rec, LPVOID param )
+     LPCWSTR name, value, component;
+     WCHAR *p, *q, *deformatted = NULL, *new_value = NULL;
+     DWORD flags, type, size, len, len_value = 0, len_new_value;
+-    HKEY env;
++    HKEY env = NULL;
+     MSICOMPONENT *comp;
+     MSIRECORD *uirow;
+     int action = 0;
+
+-- 
+2.30.2
+

@@ -1,0 +1,103 @@
+diff --git a/dlls/ntdll/ntdll_misc.h b/dlls/ntdll/ntdll_misc.h
+index 3a9314c..788759a 100755
+--- a/dlls/ntdll/ntdll_misc.h 
++++ b/dlls/ntdll/ntdll_misc.h
+@@ -146,6 +146,21 @@ struct dllredirect_data
+ #define DLL_REDIRECT_PATH_EXPAND                                  4
+ #define DLL_REDIRECT_PATH_SYSTEM_DEFAULT_REDIRECTED_SYSTEM32_DLL  8
+ 
++/*
++ * RTL Path Types. From Microsoft NDK rtltypes.h
++ */
++typedef enum _RTL_PATH_TYPE
++{
++    RtlPathTypeUnknown,
++    RtlPathTypeUncAbsolute,
++    RtlPathTypeDriveAbsolute,
++    RtlPathTypeDriveRelative,
++    RtlPathTypeRooted,
++    RtlPathTypeRelative,
++    RtlPathTypeLocalDevice,
++    RtlPathTypeRootLocalDevice,
++} RTL_PATH_TYPE;
++ 
+ #ifdef _WIN64
+ static inline TEB64 *NtCurrentTeb64(void) { return NULL; }
+ #else
+ diff --git a/dlls/ntdll/path.c b/dlls/ntdll/path.c
+index cccd000..9fd1550 100755
+--- a/dlls/ntdll/path.c        
++++ b/dlls/ntdll/path.c
+@@ -756,6 +756,58 @@ DWORD WINAPI RtlGetFullPathName_U(const WCHAR* name, ULONG size, WCHAR* buffer,
+     return reqsize;
+ }
+ 
++/******************************************************************
++ *             RtlGetFullPathName_UEx  (NTDLL.@)
++ *
++ * Identical to RtlGetFullPathName_U, but includes unicode support
++ * Code inspired by ReactOs:
++ * https://doxygen.reactos.org/d0/d23/sdk_2lib_2rtl_2path_8c_source.html
++ */
++NTSTATUS WINAPI RtlGetFullPathName_UEx(LPCSTR fileName, ULONG bufferSize, PWSTR buffer, PWSTR* filePart, 
++                                          RTL_PATH_TYPE* pathType)
++{
++    PWSTR fileNameString;
++    NTSTATUS status;
++ 
++    if (pathType)
++        *pathType = 0;
++ 
++    /* Build the string */
++    status = RtlInitUnicodeStringEx(&fileNameString, fileName);
++    if (!NT_SUCCESS(status)) return 0;
++          
++    status = RtlGetFullPathName_U(&fileNameString, bufferSize, buffer, (PCWSTR*)filePart);
++                                     /* pathType);*/
++    return (status ? STATUS_SUCCESS : 0xC0000001);
++}
++
++/******************************************************************
++ *             RtlGetFullPathName_UstrEx  (NTDLL.@)
++ *  RtlGetFullPathName_UstrEx: This is just a wrapper to 
++ *  RtlGetFullPathName_Uex, for compatibility with older applications
++ */
++NTSTATUS WINAPI RtlGetFullPathName_UstrEx(LPWSTR name, LPWSTR s_Buffer, LPWSTR d_Buffer,
++                                          LPWSTR* buffer, SIZE_T* partSize, BOOL isValid, 
++                                         RTL_PATH_TYPE* path, SIZE_T* reqBytes)
++{
++    FIXME("TODO: Rewrite this function.\n");
++    return RtlGetFullPathName_UEx(name, s_Buffer, d_Buffer, buffer, path);
++}
++
++/******************************************************************
++ *             RtlGetFullPathName_Ustr  (NTDLL.@)
++ *  RtlGetFullPathName_Ustr: This is just a wrapper to 
++ *  RtlGetFullPathName_U, for compatibility with older applications 
++ */
++ULONG WINAPI RtlGetFullPathName_Ustr(LPWSTR name, ULONG buffSize, PWSTR buffer, PCWSTR* shortName,
++                                        BOOL isValid, RTL_PATH_TYPE* pathType)
++{
++    FIXME("TODO: Rewrite this function.\n");
++    RtlGetFullPathName_U(name, buffSize, buffer, pathType);
++    FIXME("Return true path size value.\n");
++    return buffSize;
++}
++
+ /*************************************************************************
+  * RtlGetLongestNtPathLength    [NTDLL.@]
+  *
+  diff --git a/dlls/ntdll/ntdll.spec b/dlls/ntdll/ntdll.spec
+index 4581b95..7f00f8c 100755
+--- a/dlls/ntdll/ntdll.spec   
++++ b/dlls/ntdll/ntdll.spec
+@@ -722,6 +722,9 @@
+ # @ stub RtlGetFirstRange
+ @ stdcall RtlGetFrame()
+ @ stdcall RtlGetFullPathName_U(wstr long ptr ptr)
++@ stdcall RtlGetFullPathName_UEx(wstr long wstr ptr ptr)
++@ stdcall RtlGetFullPathName_Ustr(wstr long wstr ptr long ptr)
++@ stdcall RtlGetFullPathName_UstrEx(wstr wstr wstr ptr ptr long ptr ptr)
+ @ stdcall RtlGetGroupSecurityDescriptor(ptr ptr ptr)
+ @ stdcall RtlGetLastNtStatus()
+ @ stdcall RtlGetLastWin32Error()
