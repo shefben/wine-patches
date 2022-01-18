@@ -1,0 +1,185 @@
+From: Piotr Caban <piotr@codeweavers.com>
+Subject: [PATCH 1/2] msvcp110: Add _Throw_Cpp_error implementation.
+Message-Id: <9026fe42-3ca7-6a4b-7a51-a49f769d2ee6@codeweavers.com>
+Date: Thu, 11 Feb 2021 13:49:01 +0100
+
+
+Implementation based on
+https://github.com/microsoft/STL/blob/main/stl/src/thread0.cpp
+
+Signed-off-by: Piotr Caban <piotr@codeweavers.com>
+---
+  dlls/msvcp110/msvcp110.spec         |   2 +-
+  dlls/msvcp120/msvcp120.spec         |   2 +-
+  dlls/msvcp120_app/msvcp120_app.spec |   2 +-
+  dlls/msvcp140/msvcp140.spec         |   2 +-
+  dlls/msvcp90/exception.c            |  39 ++++++--
+  dlls/msvcp90/misc.c                 |  33 ++++++-
+  dlls/msvcp90/msvcp90.h              |  1 +
+  14 files changed, 162 insertions(+), 115 deletions(-)
+
+diff --git a/dlls/msvcp110/msvcp110.spec b/dlls/msvcp110/msvcp110.spec
+index 10c2216aebb..40cd6370dd3 100644
+--- a/dlls/msvcp110/msvcp110.spec
++++ b/dlls/msvcp110/msvcp110.spec
+@@ -1779,7 +1779,7 @@
+ @ cdecl -arch=win32 ?_Syserror_map@std@@YAPBDH@Z(long) _Syserror_map
+ @ cdecl -arch=win64 ?_Syserror_map@std@@YAPEBDH@Z(long) _Syserror_map
+ @ stub ?_Throw_C_error@std@@YAXH@Z
+-@ stub ?_Throw_Cpp_error@std@@YAXH@Z
++@ cdecl ?_Throw_Cpp_error@std@@YAXH@Z(long) _Throw_Cpp_error
+ @ stub -arch=win32 ?_Throw_future_error@std@@YAXABVerror_code@1@@Z
+ @ stub -arch=win64 ?_Throw_future_error@std@@YAXAEBVerror_code@1@@Z
+ @ stub ?_Throw_lock_error@threads@stdext@@YAXXZ
+diff --git a/dlls/msvcp120/msvcp120.spec b/dlls/msvcp120/msvcp120.spec
+index 6f3e7b65f92..c21895eecf5 100644
+--- a/dlls/msvcp120/msvcp120.spec
++++ b/dlls/msvcp120/msvcp120.spec
+@@ -1740,7 +1740,7 @@
+ @ cdecl -arch=win32 ?_Syserror_map@std@@YAPBDH@Z(long) _Syserror_map
+ @ cdecl -arch=win64 ?_Syserror_map@std@@YAPEBDH@Z(long) _Syserror_map
+ @ stub ?_Throw_C_error@std@@YAXH@Z
+-@ stub ?_Throw_Cpp_error@std@@YAXH@Z
++@ cdecl ?_Throw_Cpp_error@std@@YAXH@Z(long) _Throw_Cpp_error
+ @ stub -arch=win32 ?_Throw_future_error@std@@YAXABVerror_code@1@@Z
+ @ stub -arch=win64 ?_Throw_future_error@std@@YAXAEBVerror_code@1@@Z
+ @ stub ?_Throw_lock_error@threads@stdext@@YAXXZ
+diff --git a/dlls/msvcp120_app/msvcp120_app.spec b/dlls/msvcp120_app/msvcp120_app.spec
+index c35dcb2d427..00fa5592ac5 100644
+--- a/dlls/msvcp120_app/msvcp120_app.spec
++++ b/dlls/msvcp120_app/msvcp120_app.spec
+@@ -1740,7 +1740,7 @@
+ @ cdecl -arch=win32 ?_Syserror_map@std@@YAPBDH@Z(long) msvcp120.?_Syserror_map@std@@YAPBDH@Z
+ @ cdecl -arch=win64 ?_Syserror_map@std@@YAPEBDH@Z(long) msvcp120.?_Syserror_map@std@@YAPEBDH@Z
+ @ stub ?_Throw_C_error@std@@YAXH@Z
+-@ stub ?_Throw_Cpp_error@std@@YAXH@Z
++@ cdecl ?_Throw_Cpp_error@std@@YAXH@Z(long) msvcp120.?_Throw_Cpp_error@std@@YAXH@Z
+ @ stub -arch=win32 ?_Throw_future_error@std@@YAXABVerror_code@1@@Z
+ @ stub -arch=win64 ?_Throw_future_error@std@@YAXAEBVerror_code@1@@Z
+ @ stub ?_Throw_lock_error@threads@stdext@@YAXXZ
+diff --git a/dlls/msvcp140/msvcp140.spec b/dlls/msvcp140/msvcp140.spec
+index dcd062aa4fc..2b0bf5ffa5e 100644
+--- a/dlls/msvcp140/msvcp140.spec
++++ b/dlls/msvcp140/msvcp140.spec
+@@ -1624,7 +1624,7 @@
+ @ cdecl -arch=win32 ?_Syserror_map@std@@YAPBDH@Z(long) _Syserror_map
+ @ cdecl -arch=win64 ?_Syserror_map@std@@YAPEBDH@Z(long) _Syserror_map
+ @ stub ?_Throw_C_error@std@@YAXH@Z
+-@ stub ?_Throw_Cpp_error@std@@YAXH@Z
++@ cdecl ?_Throw_Cpp_error@std@@YAXH@Z(long) _Throw_Cpp_error
+ @ stub -arch=win32 ?_Throw_future_error@std@@YAXABVerror_code@1@@Z
+ @ stub -arch=win64 ?_Throw_future_error@std@@YAXAEBVerror_code@1@@Z
+ @ cdecl -arch=arm ?_Tidy@?$_Yarn@D@std@@AAAXXZ(ptr) _Yarn_char__Tidy
+diff --git a/dlls/msvcp90/exception.c b/dlls/msvcp90/exception.c
+index 8ea4e132a0f..45e2ec93be4 100644
+--- a/dlls/msvcp90/exception.c
++++ b/dlls/msvcp90/exception.c
+@@ -668,6 +668,17 @@ typedef struct {
+ typedef system_error _System_error;
+ typedef system_error failure;
+ 
++#if _MSVCP_VER > 90
++static system_error* MSVCP_system_error_ctor( system_error *this, int err, exception_name name )
++{
++    TRACE("%p %d %s\n", this, err, EXCEPTION_STR(name));
++    MSVCP_runtime_error_ctor(&this->base, name);
++    this->err = err;
++    this->base.e.vtable = &system_error_vtable;
++    return this;
++}
++#endif
++
+ static failure* MSVCP_failure_ctor( failure *this, exception_name name )
+ {
+     TRACE("%p %s\n", this, EXCEPTION_STR(name));
+@@ -747,7 +758,9 @@ DEFINE_RTTI_DATA4(failure, 0, &system_error_rtti_base_descriptor,
+         &_System_error_rtti_base_descriptor, &runtime_error_rtti_base_descriptor,
+         &exception_rtti_base_descriptor, ".?AVfailure@ios_base@std@@")
+ DEFINE_CXX_TYPE_INFO(_System_error)
+-DEFINE_CXX_TYPE_INFO(system_error);
++DEFINE_CXX_DATA3(system_error, &_System_error_cxx_type_info,
++        &runtime_error_cxx_type_info, &exception_cxx_type_info,
++        MSVCP_runtime_error_dtor)
+ DEFINE_CXX_DATA4(failure, &system_error_cxx_type_info,
+         &_System_error_cxx_type_info, &runtime_error_cxx_type_info,
+         &exception_cxx_type_info, MSVCP_runtime_error_dtor)
+@@ -757,7 +770,8 @@ DEFINE_RTTI_DATA2(system_error, 0, &runtime_error_rtti_base_descriptor,
+ DEFINE_RTTI_DATA3(failure, 0, &system_error_rtti_base_descriptor,
+         &runtime_error_rtti_base_descriptor, &exception_rtti_base_descriptor,
+         ".?AVfailure@ios_base@std@@")
+-DEFINE_CXX_TYPE_INFO(system_error);
++DEFINE_CXX_DATA2(system_error, &runtime_error_cxx_type_info,
++        &exception_cxx_type_info, MSVCP_runtime_error_dtor)
+ DEFINE_CXX_DATA3(failure, &system_error_cxx_type_info, &runtime_error_cxx_type_info,
+         &exception_cxx_type_info, MSVCP_runtime_error_dtor)
+ #else
+@@ -1108,6 +1108,18 @@ void DECLSPEC_NORETURN throw_failure(const char *str)
+     _CxxThrowException(&e, &failure_cxx_type);
+ }
+ 
++#if _MSVCP_VER > 90
++/* Internal: throws system_error exception */
++void DECLSPEC_NORETURN throw_system_error(const char *str, int err)
++{
++    exception_name name = EXCEPTION_NAME(str);
++    system_error e;
++
++    MSVCP_system_error_ctor(&e, err, name);
++    _CxxThrowException(&e, &system_error_cxx_type);
++}
++#endif
++
+ void init_exception(void *base)
+ {
+ #ifdef __x86_64__
+diff --git a/dlls/msvcp90/misc.c b/dlls/msvcp90/misc.c
+index f70de9e5600..7978b87777a 100644
+--- a/dlls/msvcp90/misc.c
++++ b/dlls/msvcp90/misc.c
+@@ -194,6 +194,19 @@ static const struct {
+     {ETXTBSY, str_ETXTBSY},
+     {EWOULDBLOCK, str_EWOULDBLOCK},
+ };
++
++static const struct {
++    int err;
++    const char *msg;
++} cpp_error[] = {
++    { EBUSY, str_EBUSY },
++    { EINVAL, str_EINVAL },
++    { ESRCH, str_ESRCH },
++    { ENOMEM, str_ENOMEM },
++    { EPERM, str_EPERM },
++    { EDEADLK, str_EDEADLK },
++    { EAGAIN, str_EAGAIN }
++};
+ #endif
+ 
+ #if _MSVCP_VER >= 140
+@@ -2870,6 +2883,16 @@ const char* __cdecl _Syserror_map(int err)
+     return NULL;
+ #endif
+ }
++
++void __cdecl _Throw_Cpp_error(int code)
++{
++    char msg[256];
++
++    TRACE("(%d)\n", code);
++
++    sprintf(msg, "%s: %s", _Syserror_map(cpp_error[code].err), cpp_error[code].msg);
++    throw_system_error(cpp_error[code].err, msg);
++}
+ #endif
+ 
+ #if _MSVCP_VER >= 140
+diff --git a/dlls/msvcp90/msvcp90.h b/dlls/msvcp90/msvcp90.h
+index 4aa88e028d6..b7ef9aea8aa 100644
+--- a/dlls/msvcp90/msvcp90.h
++++ b/dlls/msvcp90/msvcp90.h
+@@ -672,3 +672,4 @@ void __cdecl DECLSPEC_NORETURN _Xruntime_error(const char*);
+ void DECLSPEC_NORETURN throw_exception(const char*);
+ void DECLSPEC_NORETURN throw_failure(const char*);
+ void DECLSPEC_NORETURN throw_range_error(const char*);
++void DECLSPEC_NORETURN throw_system_error(const char*,int);
+

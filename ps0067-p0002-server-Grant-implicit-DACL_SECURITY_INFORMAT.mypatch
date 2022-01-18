@@ -1,0 +1,37 @@
+From: Dmitry Timoshkov <dmitry@baikal.ru>
+Subject: [PATCH 2/2] server: Grant implicit DACL_SECURITY_INFORMATION permission to an object owner.
+Message-Id: <20210202174109.810b238c12a8632a4ea5e6b5@baikal.ru>
+Date: Tue, 2 Feb 2021 17:41:09 +0300
+
+Signed-off-by: Dmitry Timoshkov <dmitry@baikal.ru>
+---
+ dlls/advapi32/tests/security.c |  4 ----
+ server/handle.c                | 11 +++++++++++
+ 2 files changed, 11 insertions(+), 4 deletions(-)
+
+diff --git a/server/handle.c b/server/handle.c
+index 2556a03901e..fd17be3d40c 100644
+--- a/server/handle.c
++++ b/server/handle.c
+@@ -479,6 +479,17 @@ struct object *get_handle_obj( struct process *process, obj_handle_t handle,
+             set_error( STATUS_OBJECT_TYPE_MISMATCH );  /* not the right type */
+             return NULL;
+         }
++        if (access & (READ_CONTROL | WRITE_DAC))
++        {
++            const struct security_descriptor *sd = obj->ops->get_sd( obj );
++            if (sd)
++            {
++                struct token *token = current->token ? current->token : current->process->token;
++                const SID *owner = sd_get_owner( sd );
++                if (token_sid_present( token, owner, FALSE ))
++                    access &= ~(READ_CONTROL | WRITE_DAC);
++            }
++        }
+         if ((entry->access & access) != access)
+         {
+             set_error( STATUS_ACCESS_DENIED );
+
+-- 
+2.29.2
+

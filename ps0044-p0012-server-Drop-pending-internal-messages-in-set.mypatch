@@ -1,0 +1,72 @@
+From ff05e416cf75272b721c0953af1bfefe920f016c Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?R=C3=A9mi=20Bernon?= <rbernon@codeweavers.com>
+Date: Thu, 20 May 2021 15:35:20 +0200
+Subject: [PATCH 12/13] server: Drop pending internal messages in
+ set_active_window.
+
+When changing the active window in the foreground thread.
+---
+ dlls/user32/focus.c     |  1 +
+ dlls/user32/tests/msg.c | 46 ++++++++++++++++++++---------------------
+ server/protocol.def     |  1 +
+ server/queue.c          | 12 +++++++++++
+ 4 files changed, 36 insertions(+), 24 deletions(-)
+
+diff --git a/dlls/user32/focus.c b/dlls/user32/focus.c
+index 1a97c2f61bb..e0065d0c76f 100644
+--- a/dlls/user32/focus.c
++++ b/dlls/user32/focus.c
+@@ -102,6 +102,7 @@ static BOOL set_active_window( HWND hwnd, HWND *prev, BOOL mouse, BOOL focus )
+     SERVER_START_REQ( set_active_window )
+     {
+         req->handle = wine_server_user_handle( hwnd );
++        req->internal_msg = WM_WINE_SETACTIVEWINDOW;
+         if ((ret = !wine_server_call_err( req )))
+             previous = wine_server_ptr_handle( reply->previous );
+     }
+diff --git a/server/protocol.def b/server/protocol.def
+index e098c78a125..2c90e9d05a2 100644
+--- a/server/protocol.def
++++ b/server/protocol.def
+@@ -2788,6 +2788,7 @@ enum coords_relative
+ /* Set the current thread active window */
+ @REQ(set_active_window)
+     user_handle_t  handle;        /* handle to the active window */
++    unsigned int   internal_msg;  /* set active window internal message */
+ @REPLY
+     user_handle_t  previous;      /* handle to the previous active window */
+ @END
+diff --git a/server/queue.c b/server/queue.c
+index f07f408b9d1..cf709c5f15e 100644
+--- a/server/queue.c
++++ b/server/queue.c
+@@ -3142,7 +3142,11 @@ DECL_HANDLER(set_focus_window)
+ /* set the current thread active window */
+ DECL_HANDLER(set_active_window)
+ {
++    struct message *msg, *next;
+     struct msg_queue *queue = get_current_queue();
++    struct desktop *desktop;
++
++    if (!(desktop = get_thread_desktop( current, 0 ))) return;
+ 
+     reply->previous = 0;
+     if (queue && check_queue_input_window( queue, req->handle ))
+@@ -3268,9 +3268,17 @@ DECL_HANDLER(set_active_window)
+         {
+             reply->previous = queue->input->active;
+             queue->input->active = get_user_full_handle( req->handle );
++
++            if (desktop->foreground_input == queue->input && req->handle != reply->previous)
++            {
++                LIST_FOR_EACH_ENTRY_SAFE( msg, next, &queue->msg_list[POST_MESSAGE], struct message, entry )
++                    if (msg->msg == req->internal_msg) remove_queue_message( queue, msg, POST_MESSAGE );
++            }
+         }
+         else set_error( STATUS_INVALID_HANDLE );
+     }
++    
++    release_object( desktop );
+ }
+ 
+ 
